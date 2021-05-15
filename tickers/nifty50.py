@@ -49,7 +49,7 @@ contracts = ['POWERGRID_STK_NSE',
              'BAJFINANC_STK_NSE',
              'BHARTIART_STK_NSE']
 
-symbols = ['POWERGRID',
+tickers = ['POWERGRID',
            'ONGC',
            'GRASIM',
            'UPL',
