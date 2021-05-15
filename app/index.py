@@ -1,5 +1,5 @@
 import dash
-from components.ticker import ticker_dropdown
+from app.components.ticker import ticker_dropdown
 import dash_html_components as html
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']

@@ -1,5 +1,5 @@
 import dash_core_components as dcc
-from tickers.nifty50 import tickers
+from app.tickers import tickers
 
 ticker_dropdown = dcc.Dropdown(
     id='ticker-dropdown',
