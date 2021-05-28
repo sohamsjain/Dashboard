@@ -7,11 +7,11 @@ from dash.dependencies import Input, Output, State
 from src.app import app
 from sqlalchemy import create_engine
 import pandas as pd
+from src.BaTMan import batman
 
-conn = create_engine(r"sqlite:///C:\Users\PC2\PycharmProjects\Dashboard\contracts.db", echo=False)
+conn = create_engine(r"sqlite:///C:\Users\PC2\PycharmProjects\Dashboard\src\contracts.db", echo=False)
 df = pd.read_sql_table("Contracts", conn)
-observe_tickers = df.query("sectype!='OPT'")["localSymbol"].to_list()
-all_symbols = df.localSymbol.to_list()
+observe_tickers = df.query("sectype!='OPT'")["symbol"].to_list()
 
 ticker_dropdown_options = dict(
     observe=[dict(label=tk, value=tk) for tk in observe_tickers],
@@ -55,7 +55,7 @@ entry_input = dcc.Input(
     type="number",
     placeholder="Entry",
     className="m-3",
-    style={"width":"90%"}
+    style={"width": "90%"}
 )
 
 stoploss_input = dcc.Input(
@@ -63,7 +63,7 @@ stoploss_input = dcc.Input(
     type="number",
     placeholder="Stoploss",
     className="m-3",
-    style={"width":"90%"}
+    style={"width": "90%"}
 )
 
 target_input = dcc.Input(
@@ -71,7 +71,7 @@ target_input = dcc.Input(
     type="number",
     placeholder="Target",
     className="m-3",
-    style={"width":"90%"}
+    style={"width": "90%"}
 )
 
 size_input = dcc.Input(
@@ -79,16 +79,28 @@ size_input = dcc.Input(
     type="number",
     placeholder="Size",
     className="m-3",
-    style={"width":"90%"}
+    style={"width": "90%"}
 )
 
 size_div = html.Div(id="size-div")
 
-submit_button = dbc.Button("Submit", color="light", className="m-3", id="submit-button", style={"width":"90%"})
+submit_button = dbc.Button("Submit", color="light", className="m-3", id="submit-button", style={"width": "90%"})
+
+
+toast = dbc.Toast(
+            "Submitted Successfully",
+            id="toast",
+            header="New Xone",
+            is_open=False,
+            dismissable=True,
+            duration=4000,
+            icon="success",
+            style={"position": "fixed", "bottom": 10, "right": 10, "width": 350},
+        )
 
 entry_form = html.Div(
     [exectype_radioitems, observe_ticker_dropdown, trade_ticker_dropdown_div, entry_input,
-     stoploss_input, target_input, size_div, submit_button])
+     stoploss_input, target_input, size_div, submit_button, toast])
 
 
 @app.callback(
@@ -116,9 +128,9 @@ def update_trade_ticker_options(observe_localSymbol, exectype):
     if exectype == "Conditional":
         if observe_localSymbol is None:
             raise dash.exceptions.PreventUpdate
-        symbol = df.query(f"localSymbol=='{observe_localSymbol}'")["symbol"].values[0]
-        updated_list = df.query(f"symbol=='{symbol}'")["localSymbol"].to_list()
-        return [dict(label=tk, value=tk) for tk in updated_list], 75, 75
+        symbol = df.query(f"symbol=='{observe_localSymbol}'")["underlying"].values[0]
+        updated_list = df.query(f"underlying=='{symbol}'")["symbol"].to_list()
+        return [dict(label=tk, value=tk) for tk in updated_list], 1, 1
 
 
 @app.callback(
@@ -135,7 +147,7 @@ def update_trade_ticker_options(entry, stoploss):
             return entry + risk, "success"
         elif entry < stoploss:
             return entry - risk, "danger"
-    raise dash.exceptions.PreventUpdate
+    return None, "light"
 
 
 @app.callback(
@@ -144,7 +156,42 @@ def update_trade_ticker_options(entry, stoploss):
 )
 def update_trade_ticker_options(observe_ticker):
     if observe_ticker:
-        sectype = df.query(f"localSymbol=='{observe_ticker}'")["sectype"].values[0]
+        sectype = df.query(f"symbol=='{observe_ticker}'")["sectype"].values[0]
         if sectype == "IND":
             return "Conditional"
+    raise dash.exceptions.PreventUpdate
+
+
+@app.callback(
+    Output(component_id="observe-ticker-dropdown", component_property="value"),
+    Output(component_id="trade-ticker-dropdown", component_property="value"),
+    Output(component_id="entry-input", component_property="value"),
+    Output(component_id="stoploss-input", component_property="value"),
+    Output(component_id="toast", component_property="is_open"),
+    Output(component_id="toast", component_property="children"),
+    Input(component_id="submit-button", component_property="n_clicks"),
+    State(component_id="exectype-radioitems", component_property="value"),
+    State(component_id="observe-ticker-dropdown", component_property="value"),
+    State(component_id="trade-ticker-dropdown", component_property="value"),
+    State(component_id="entry-input", component_property="value"),
+    State(component_id="stoploss-input", component_property="value"),
+    State(component_id="target-input", component_property="value"),
+    State(component_id="size-input", component_property="value"), prevent_initial_call=True
+)
+def submit(n, exec, observe, trade, entry, stoploss, target, size):
+    if n:
+        xone = dict(
+            symbol=observe,
+            entry=entry,
+            stoploss=stoploss,
+            target=target,
+            children=[
+                dict(
+                    symbol=observe if exec == "Simple" else trade,
+                    size=size
+                )
+            ]
+        )
+        response = batman.create(xone)
+        return None, None, None, None, True, response
     raise dash.exceptions.PreventUpdate

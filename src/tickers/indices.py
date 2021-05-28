@@ -1,1 +1,0 @@
-indices_tickers = ['NIFTY50', 'BANKNIFTY']
