@@ -1,11 +1,33 @@
 import pandas as pd
 from sqlalchemy import create_engine
 import backtrader as bt
+from src.models import *
 
 
 conn = create_engine(f'sqlite:///contracts.db', echo=False)
 store = bt.stores.IBStore(host="52.70.61.124", port=7497)
 store.start()
+
+lotsize = pd.read_csv("https://archives.nseindia.com/content/fo/fo_mktlots.csv")
+
+lotsize.columns = [c.strip() for c in lotsize.columns]
+
+for lc in lotsize.columns:
+    lotsize[lc] = lotsize[lc].apply(str.strip)
+
+
+def get_lotsize(contract_dict):
+    symbol = contract_dict['underlying']
+    expiry: datetime = contract_dict['expiry']
+    if expiry is None:
+        return 1
+    expiry = pd.to_datetime(expiry)
+    strexpiry = expiry.strftime("%B-%y").upper()
+
+    try:
+        return int(lotsize.query(f"SYMBOL=='{symbol}'")[str][0])
+    except:
+        return 1
 
 
 def create_btsymbol(contract_dict):
@@ -34,7 +56,7 @@ def get_cds(symbol):
     for sectype in ["IND", "STK", "FUT", "OPT"]:
         contract = store.makecontract(symbol=sym, sectype=sectype, exch="NSE", curr="INR")
         cds = store.getContractDetails(contract)
-        if cds == None:
+        if cds is None:
             continue
         for con in cds:
             c = con.contractDetails.m_summary
@@ -68,4 +90,4 @@ if __name__ == '__main__':
     df = pd.DataFrame(supercontract)
     df["btsymbol"] = df.apply(create_btsymbol, axis=1)
     df.expiry = pd.to_datetime(df.expiry)
-    df.to_sql('contracts', conn, if_exists="replace", index=False)
+    df.to_sql('Contracts', conn, if_exists="replace", index=False)

@@ -1,5 +1,6 @@
 import dash
 import dash_bootstrap_components as dbc
+from src.BaTMan import batman
 
 # 'https://codepen.io/chriddyp/pen/bWLwgP.css',
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css', dbc.themes.BOOTSTRAP]

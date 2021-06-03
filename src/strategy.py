@@ -1,6 +1,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from queue import Queue
 import backtrader as bt
 from src.models import *
 
@@ -16,6 +17,7 @@ class Grid(bt.Strategy):
         self.order = None
         self.childrenbyorder = dict()
         self.openordercount = 0
+        self.sessionq = Queue()
 
     def notify_order(self, order):
 
@@ -42,7 +44,7 @@ class Grid(bt.Strategy):
                     child.status = ChildStatus.BOUGHT
                     child.opened_at = datetime.now()
                 else:
-                    child.filled -= order.executed.size
+                    child.filled += order.executed.size
                     child.status = ChildStatus.CLOSED
                     child.closed_at = datetime.now()
                     child.pnl = child.selling_cost - child.buying_cost
@@ -54,7 +56,7 @@ class Grid(bt.Strategy):
                 child.selling_commission = order.executed.comm
 
                 if child.isbuy:
-                    child.filled -= order.executed.size
+                    child.filled += order.executed.size
                     child.status = ChildStatus.CLOSED
                     child.closed_at = datetime.now()
                     child.pnl = child.selling_cost - child.buying_cost
@@ -125,6 +127,15 @@ class Grid(bt.Strategy):
 
     def next(self):
 
+        while not self.sessionq.empty():
+            xone = self.sessionq.get()
+            self.batman.add(xone)
+            try:
+                if xone.data._dataname not in [d._dataname for d in self.datas]:
+                    self.datas.append(xone.data)
+            except Exception as e:
+                print(e)
+
         for data in self.datas:
             btsymbol = data._dataname
 
@@ -139,14 +150,9 @@ class Grid(bt.Strategy):
                     continue
 
                 try:
-                    c = xone.data.close[0]
+                    xd = xone.data.close[0]
                     for child in xone.children:
-                        try:
-                            d = child.data
-                        except AttributeError:
-                            child.start()
-                            child.data = self.batman.alldatas[child.btsymbol]
-                        c = child.data.close[0]
+                        cd = child.data.close[0]
                 except IndexError:
                     continue
 
@@ -169,12 +175,11 @@ class Grid(bt.Strategy):
                             if (len(self.batman.openxones) + self.openordercount) < self.p.maxpos:
                                 self.openordercount += 1
                                 for child in xone.children:
-                                    child_data = child.data
                                     size = child.size
                                     if child.isbuy:
-                                        order = self.buy(data=child_data, size=size)
+                                        order = self.buy(data=child.data, size=size)
                                     else:
-                                        order = self.sell(data=child_data, size=size)
+                                        order = self.sell(data=child.data, size=size)
                                     xone.orders.append(order)
                                     self.childrenbyorder[order.ref] = child
                                 xone.orders.append(None)
@@ -197,12 +202,11 @@ class Grid(bt.Strategy):
                             if (len(self.batman.openxones) + self.openordercount) < self.p.maxpos:
                                 self.openordercount += 1
                                 for child in xone.children:
-                                    child_data = child.data
                                     size = child.size
                                     if child.isbuy:
-                                        order = self.buy(data=child_data, size=size)
+                                        order = self.buy(data=child.data, size=size)
                                     else:
-                                        order = self.sell(data=child_data, size=size)
+                                        order = self.sell(data=child.data, size=size)
                                     xone.orders.append(order)
                                     self.childrenbyorder[order.ref] = child
                                 xone.orders.append(None)
@@ -254,35 +258,17 @@ class Grid(bt.Strategy):
                         xone.pnl = sum([c.pnl for c in xone.children if c.pnl is not None])
                         xone.status = XoneStatus.FORCECLOSED
                         self.batman.remove(xone)
+                        self.batman.openxones.remove(xone)
 
                 else:
                     self.batman.remove(xone)
 
         self.batman.session.commit()
 
-    def add_xone(self, xone):
-
-        restart = False
-
-        xone.start()
-        xone.data, dorestart = self.batman.getdata(xone.btsymbol, fromcb=True)
-        restart = dorestart if not restart and dorestart else restart
-        self.datas.append(xone.data)
-
-        for child in xone.children:
-            child.start()
-            child.data, dorestart = self.batman.getdata(child.btsymbol, fromcb=True)
-            restart = dorestart if not restart and dorestart else restart
-            self.datas.append(child.data)
-
-        if restart:
-            self.cerebro.runrestart()
-
     def stop(self):
         self.batman.market = False
-        self.batman.addxonecb = None
+        self.batman.sessionq = None
 
     def start(self):
         self.batman.market = True
-        self.batman.addxonecb = self.add_xone
-
+        self.batman.sessionq = self.sessionq

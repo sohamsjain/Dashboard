@@ -1,29 +1,49 @@
+from datetime import datetime, timedelta
 import sys
+import schedule
 import traceback
+import time
 from threading import Thread
-from typing import List, Dict, Optional, Callable, Union, Tuple
+from typing import List, Dict, Optional, Callable, Union, Tuple, Set
 from src.mysizer import MySizer
 from src.strategy import *
 
 HOST, PORT = "52.70.61.124", 7497
 
+yesterday = datetime.now().date() - timedelta(days=5)
+
 
 class BaTMan:
 
     def __init__(self):
+
         self.db = Db()
         self.session = self.db.session
+
         self.cerebro: Optional[bt.Cerebro] = None
         self.store: Optional[bt.stores.IBStore] = None
+
         self.alldatas: Dict[str, bt.feeds.IBData] = dict()
+
         self.allxones: List[Xone] = list()
         self.openxones: List[Xone] = list()
+        self.allchildren: List[Child] = list()
         self.xonesbybtsymbol: Dict[str, List[Xone]] = dict()
+
         self.market = False
-        self.addxonecb: Optional[Callable] = None
-        self.runthread = Thread(target=self.run, name="runthread").start()
+        self.sessionq: Optional[Queue] = None
+
+        self.runthread = Thread(target=self.scheduler, name="runthread")
+        self.runthread.start()
+
+    def scheduler(self):
+        schedule.every().day.at("09:10").do(self.run)
+        while 1:
+            schedule.run_pending()
+            time.sleep(1)
 
     def create(self, dictionary):
+        session = self.db.scoped_session()
 
         xonekwargs = {key: val for key, val in dictionary.items() if val != ''}
 
@@ -37,7 +57,7 @@ class BaTMan:
         symbol = symbol.upper()
 
         try:
-            contract = self.session.query(Contract).filter(Contract.symbol == symbol).one()
+            contract = session.query(Contract).filter(Contract.symbol == symbol).one()
         except NoResultFound:
             return f"Invalid Symbol: {symbol}"
         except MultipleResultsFound:
@@ -94,7 +114,7 @@ class BaTMan:
             kidsymbol = kidsymbol.upper()
 
             try:
-                kidcontract = self.session.query(Contract).filter(Contract.symbol == kidsymbol).one()
+                kidcontract = session.query(Contract).filter(Contract.symbol == kidsymbol).one()
             except NoResultFound:
                 return f"Invalid Symbol: {kidsymbol}"
             except MultipleResultsFound:
@@ -123,13 +143,26 @@ class BaTMan:
 
         xone.children = children_objects
 
-        if self.market:
-            self.addxonecb(xone)
-            self.allxones.append(xone)
-            self.add(xone)
+        session.add(xone)
+        session.commit()
 
-        self.session.add(xone)
-        self.session.commit()
+        if self.market:
+
+            restart = False
+            xone.start()
+            xone.data, dorestart = self.getdata(xone.btsymbol)
+            restart = dorestart if not restart and dorestart else restart
+
+            for child in xone.children:
+                child.start()
+                child.data, dorestart = self.getdata(child.btsymbol)
+                restart = dorestart if not restart and dorestart else restart
+
+            if restart:
+                self.cerebro.runrestart()
+
+            session.expunge(xone)
+            self.sessionq.put(xone)
 
         return "Xone Created Successfully"
 
@@ -139,31 +172,39 @@ class BaTMan:
         if not xonesofakind:
             self.xonesbybtsymbol.pop(xone.btsymbol)
 
-    def getdata(self, btsymbol, fromcb=False) -> Union[bt.feeds.IBData, Tuple[bt.feeds.IBData, bool]]:
+    def getdata(self, btsymbol) -> Union[bt.feeds.IBData, Tuple[bt.feeds.IBData, bool]]:
 
-        if not fromcb:
-
-            if btsymbol in self.alldatas:
-                return self.alldatas[btsymbol]
-
-            data = self.store.getdata(dataname=btsymbol, rtbar=True, backfill_start=False)
-            self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Seconds, compression=5)
-            self.alldatas[btsymbol] = data
-            return data
+        data = None
+        dorestart = False
 
         if btsymbol in self.alldatas:
-            return self.alldatas[btsymbol], False
+            data = self.alldatas[btsymbol]
 
-        data = self.store.getdata(dataname=btsymbol, rtbar=True, backfill_start=False)
-        self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Seconds, compression=5)
+        if data is None:
+            data = self.store.getdata(dataname=btsymbol, rtbar=True, backfill_start=False)
+            self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Seconds, compression=5)
+            # data = self.store.getdata(dataname=btsymbol, historical=True)  # , fromdate=yesterday)
+            # self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Minutes, compression=1)
+            self.alldatas[btsymbol] = data
+            dorestart = True
+
+        if not self.market:
+            return data
+
+        if not dorestart:
+            return data, dorestart
+
         data.reset()
+
         if self.cerebro._exactbars < 1:
             data.extend(size=self.cerebro.params.lookahead)
+
         data._start()
+
         if self.cerebro._dopreload:
             data.preload()
-        self.alldatas[btsymbol] = data
-        return data, True
+
+        return data, dorestart
 
     def add(self, xone):
         if xone.btsymbol not in self.xonesbybtsymbol:
@@ -171,19 +212,41 @@ class BaTMan:
 
         self.xonesbybtsymbol[xone.btsymbol].append(xone)
 
+        if xone._sa_instance_state.session is None:
+            self.session.add(xone)
+
+        if xone not in self.allxones:
+            self.allxones.append(xone)
+
+        for child in xone.children:
+
+            if child not in self.allchildren:
+                self.allchildren.append(child)
+
+            if child._sa_instance_state.session is None:
+                self.session.add(child)
+
     def run(self):
         try:
+            if datetime.now().date().weekday() not in range(5):
+                print("Happy Holiday")
+                return
+
             self.cerebro = bt.Cerebro()
 
             self.store = bt.stores.IBStore(host=HOST, port=PORT)
-            self.getdata("NIFTY50_IND_NSE")
+            self.getdata("INFY_STK_NSE")
+
+            self.allchildren = self.session.query(Child).filter(
+                or_(Child.status == ChildStatus.CREATED, Child.status == ChildStatus.BOUGHT,
+                    Child.status == ChildStatus.SOLD)).all()
+
             self.allxones = self.session.query(Xone).filter(
                 or_(Xone.status == XoneStatus.CREATED, Xone.status == XoneStatus.OPEN)).all()
 
             self.openxones = self.session.query(Xone).filter(Xone.status == XoneStatus.OPEN).all()
 
             for xone in self.allxones:
-
                 xone.start()
                 xone.data = self.getdata(xone.btsymbol)
 
@@ -204,8 +267,9 @@ class BaTMan:
         except Exception as e:
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
+            self.run()
 
-        input("run thread ends: ")
+        print("run thread ends: ")
 
 
 batman = BaTMan()

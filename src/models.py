@@ -25,7 +25,7 @@ class Contract(Base):
     multiplier = Column(Integer)
     btsymbol = Column(String(64))
 
-    def start(self):
+    def start(self, **kwargs):
         pass
 
 
@@ -47,9 +47,9 @@ class Xone(Base):
     status = Column(String(16), default=XoneStatus.CREATED)
     kid_count = Column(Integer)
     pnl = Column(Float, default=None)
-    contract = relationship("Contract")
+    contract = relationship("Contract", cascade="all")
 
-    def start(self):
+    def start(self, **kwargs):
         self.isbullish = True if self.type == XoneType.BULLISH else False
         self.orders = list()
         self.nextstatus = None
@@ -80,9 +80,9 @@ class Child(Base):
     selling_commission = Column(Float, default=None)
     pnl = Column(Float, default=None)
     xone = relationship("Xone", back_populates="children")
-    contract = relationship("Contract")
+    contract = relationship("Contract", cascade="all")
 
-    def start(self):
+    def start(self, **kwargs):
         self.isbuy = True if self.type == ChildType.BUY else False
         self.data = None
 
