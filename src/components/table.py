@@ -1,15 +1,13 @@
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output
-from src.app import app
-from src.models import *
+from src.app import *
 import pandas as pd
 import dash_table
 
 xoneattrs = ['symbol', 'entry', 'stoploss', 'target', 'status']
 childattrs = ['symbol', 'type', 'size', 'status']
 
-db = Db()
 session = db.scoped_session()
 
 allchildren = session.query(Child)

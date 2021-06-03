@@ -4,13 +4,13 @@ import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
-from src.app import app
+from src.app import *
 from sqlalchemy import create_engine
 import pandas as pd
 from src.BaTMan import batman
 
-conn = create_engine(r"sqlite:///C:\Users\PC2\PycharmProjects\Dashboard\src\contracts.db", echo=False)
-df = pd.read_sql_table("Contracts", conn)
+
+df = pd.read_sql_table("contracts", db.engine)
 observe_tickers = df.query("sectype!='OPT'")["symbol"].to_list()
 
 ticker_dropdown_options = dict(
