@@ -18,7 +18,7 @@ class BaTMan:
     def __init__(self):
 
         self.db = Db()
-        self.session = self.db.session
+        self.session: Optional[scoped_session] = None
 
         self.cerebro: Optional[bt.Cerebro] = None
         self.store: Optional[bt.stores.IBStore] = None
@@ -33,14 +33,18 @@ class BaTMan:
         self.market = False
         self.sessionq: Optional[Queue] = None
 
-        self.runthread = Thread(target=self.scheduler, name="runthread")
-        self.runthread.start()
+        self.schedulerthread = Thread(target=self.scheduler, name="scheduler")
+        self.schedulerthread.start()
 
     def scheduler(self):
         schedule.every().day.at("09:10").do(self.run)
+        schedule.every().friday.at("06:10").do(self.updatecontracts)
         while 1:
             schedule.run_pending()
             time.sleep(1)
+
+    def updatecontracts(self):
+        pass
 
     def create(self, dictionary):
         session = self.db.scoped_session()
@@ -231,6 +235,8 @@ class BaTMan:
             if datetime.now().date().weekday() not in range(5):
                 print("Happy Holiday")
                 return
+
+            self.session = self.db.scoped_session()
 
             self.cerebro = bt.Cerebro()
 

@@ -121,7 +121,7 @@ class Db:
         self.username = "root"
         self.password = "Soham19jain98"
         self.host = "localhost"
-        self.port = "8081"
+        self.port = "3306"
         self.database = "cerebelle"
         self.engine = create_engine(
             f"{self.dialect}+{self.driver}://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
