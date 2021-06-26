@@ -1,4 +1,9 @@
 from collections import OrderedDict
+from datetime import datetime
+
+
+SESSIONSTART = datetime.now().time().replace(hour=9, minute=15, second=0, microsecond=0)
+SESSIONEND = datetime.now().time().replace(hour=14, minute=22, second=0, microsecond=0)
 
 
 class AutoOrderedDict(OrderedDict):
