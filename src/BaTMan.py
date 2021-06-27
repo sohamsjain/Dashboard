@@ -40,7 +40,7 @@ class BaTMan:
 
     def scheduler(self):
         schedule.every().day.at("09:10").do(self.run)
-        schedule.every().friday.at("06:10").do(updatecontracts)
+        schedule.every().sunday.at("06:53").do(updatecontracts)
         while 1:
             schedule.run_pending()
             time.sleep(1)

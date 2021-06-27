@@ -85,7 +85,7 @@ def getcds(symbol):
 
 def updatecontracts():
     global store
-
+    print("Updating Contracts...")
     db = Db()
     store = bt.stores.IBStore(host=HOST, port=PORT)
     store.start()
@@ -95,11 +95,16 @@ def updatecontracts():
     all_tickers = old_df[(old_df.sectype == 'IND') | (old_df.sectype == 'STK')].underlying
 
     for ticker in all_tickers.to_list():
+        print(f"Updating {ticker}...")
         supercontract.extend(getcds(ticker))
 
     df = pd.DataFrame(supercontract)
+    print("creating btsymbol")
     df["btsymbol"] = df.apply(createbtsymbol, axis=1)
     df.expiry = pd.to_datetime(df.expiry)
+    print("copying lotsize")
     df["lotsize"] = df.apply(getlotsize, axis=1)
+    print("writing to database")
     df.to_sql('contracts', db.engine, if_exists="replace", index=False)
     store = None
+    print("update successful...")
