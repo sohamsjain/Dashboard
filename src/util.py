@@ -1,6 +1,4 @@
 from collections import OrderedDict
-import pandas as pd
-from src.constants import NSELOTSIZECSV
 
 
 class AutoOrderedDict(OrderedDict):
