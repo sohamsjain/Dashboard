@@ -129,8 +129,10 @@ def update_trade_ticker_options(observe_localSymbol, exectype):
         if observe_localSymbol is None:
             raise dash.exceptions.PreventUpdate
         symbol = df.query(f"symbol=='{observe_localSymbol}'")["underlying"].values[0]
-        updated_list = df.query(f"underlying=='{symbol}'")["symbol"].to_list()
-        return [dict(label=tk, value=tk) for tk in updated_list], 1, 1
+        cds = df.query(f"underlying=='{symbol}'")
+        updated_list = cds["symbol"].to_list()
+        lotsize = cds["lotsize"].values[0]
+        return [dict(label=tk, value=tk) for tk in updated_list], lotsize, lotsize
 
 
 @app.callback(

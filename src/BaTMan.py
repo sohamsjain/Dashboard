@@ -1,16 +1,18 @@
-from datetime import datetime, timedelta
+from datetime import datetime
+from queue import Queue
 import sys
 import schedule
 import traceback
 import time
 from threading import Thread
-from typing import List, Dict, Optional, Callable, Union, Tuple, Set
+from typing import List, Dict, Optional, Union, Tuple
+import backtrader as bt
 from src.mysizer import MySizer
-from src.strategy import *
-
-HOST, PORT = "52.70.61.124", 7497
-
-yesterday = datetime.now().date() - timedelta(days=5)
+from src.strategy import Grid
+from src.constants import HOST, PORT, YESTERDAY
+from src.helpers import updatecontracts
+from src.models import Db, Child, Xone, Contract, scoped_session, NoResultFound, MultipleResultsFound, or_
+from src.util import ChildStatus, XoneType, ChildType, XoneStatus
 
 
 class BaTMan:
@@ -38,13 +40,10 @@ class BaTMan:
 
     def scheduler(self):
         schedule.every().day.at("09:10").do(self.run)
-        schedule.every().friday.at("06:10").do(self.updatecontracts)
+        schedule.every().friday.at("06:10").do(updatecontracts)
         while 1:
             schedule.run_pending()
             time.sleep(1)
-
-    def updatecontracts(self):
-        pass
 
     def create(self, dictionary):
         session = self.db.scoped_session()

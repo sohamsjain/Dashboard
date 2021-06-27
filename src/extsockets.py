@@ -4,7 +4,7 @@ import select
 import socket
 import threading
 
-from extlogger import *
+from src.extlogger import *
 
 logcat = LogCat(__name__)
 

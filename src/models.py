@@ -90,29 +90,6 @@ class Child(Base):
 Xone.children = relationship("Child", order_by=Child.id, back_populates='xone', cascade="all, delete, delete-orphan")
 
 
-class Customer(Base):
-    __tablename__ = "customers"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(32))
-
-    def start(self):
-        self.started = True
-
-
-class Invoice(Base):
-    __tablename__ = "invoices"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    customerid = Column(Integer, ForeignKey("customers.id"))
-    amount = Column(Integer)
-    customer = relationship("Customer", back_populates='invoices')
-
-    def start(self):
-        self.started = True
-
-
-Customer.invoices = relationship("Invoice", order_by=Invoice.id, back_populates='customer')
-
-
 class Db:
 
     def __init__(self):
