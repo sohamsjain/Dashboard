@@ -131,7 +131,7 @@ def update_trade_ticker_options(observe_localSymbol, exectype):
         symbol = df.query(f"symbol=='{observe_localSymbol}'")["underlying"].values[0]
         cds = df.query(f"underlying=='{symbol}'")
         updated_list = cds["symbol"].to_list()
-        lotsize = cds["lotsize"].values[0]
+        lotsize = cds["lotsize"].values[-1]
         return [dict(label=tk, value=tk) for tk in updated_list], lotsize, lotsize
 
 
