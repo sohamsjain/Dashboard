@@ -12,7 +12,7 @@ from src.strategy import Grid
 from src.constants import HOST, PORT, YESTERDAY
 from src.helpers import updatecontracts
 from src.models import Db, Child, Xone, Contract, scoped_session, NoResultFound, MultipleResultsFound, or_, \
-    StatementError
+    StatementError, OperationalError
 from src.util import ChildStatus, XoneType, ChildType, XoneStatus
 
 
@@ -41,8 +41,7 @@ class BaTMan:
 
     def scheduler(self):
         schedule.every().day.at("09:10").do(self.run)
-        schedule.every().day.at("10:40").do(self.run)
-        schedule.every().sunday.at("19:07").do(updatecontracts)
+        schedule.every().friday.at("06:15").do(updatecontracts)
         while 1:
             schedule.run_pending()
             time.sleep(1)
@@ -275,6 +274,13 @@ class BaTMan:
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
             self.session.rollback()
+            self.run()
+
+        except OperationalError as oe:
+            exc_info = sys.exc_info()
+            traceback.print_exception(*exc_info)
+            self.session.rollback()
+            self.db = Db()
             self.run()
 
         except Exception as e:
