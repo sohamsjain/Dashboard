@@ -14,6 +14,7 @@ from src.helpers import updatecontracts
 from src.models import Db, Child, Xone, Contract, scoped_session, NoResultFound, MultipleResultsFound, or_, \
     StatementError, OperationalError
 from src.util import ChildStatus, XoneType, ChildType, XoneStatus
+from src.extsockets import ServerManager
 
 
 class BaTMan:
@@ -22,6 +23,8 @@ class BaTMan:
 
         self.db = Db()
         self.session: Optional[scoped_session] = None
+
+        self.server = ServerManager(call_on_message=self.onmessage, call_on_close=self.onclose)
 
         self.cerebro: Optional[bt.Cerebro] = None
         self.store: Optional[bt.stores.IBStore] = None
@@ -39,8 +42,29 @@ class BaTMan:
         self.schedulerthread = Thread(target=self.scheduler, name="scheduler")
         self.schedulerthread.start()
 
+    def onmessage(self, socket_, message):
+
+        if not type(message) == dict:
+            return "invalid message type, must be dict"
+
+        try:
+            meta = message['meta']
+            data = message['data']
+
+        except KeyError as ke:
+            return 'message dict must contain meta and data values, one of them is missing'
+
+        if meta == "create xone":
+            response = dict()
+            response['meta'] = "create xone response"
+            response['data'] = self.create(data)
+            self.server.send_message(socket_, response)
+
+    def onclose(self, socket_):
+        pass
+
     def scheduler(self):
-        schedule.every().day.at("09:10").do(self.run)
+        schedule.every(15).seconds.do(self.run)
         schedule.every().friday.at("06:15").do(updatecontracts)
         while 1:
             schedule.run_pending()
@@ -232,6 +256,12 @@ class BaTMan:
 
     def run(self):
         try:
+            self.alldatas.clear()
+            self.allxones.clear()
+            self.openxones.clear()
+            self.allchildren.clear()
+            self.xonesbybtsymbol.clear()
+
             if datetime.now().date().weekday() not in range(5):
                 print("Happy Holiday")
                 return

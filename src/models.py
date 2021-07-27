@@ -96,9 +96,9 @@ class Db:
     def __init__(self):
         self.dialect = "mysql"
         self.driver = "pymysql"
-        self.username = "root"
+        self.username = "soham"
         self.password = "Soham19jain98"
-        self.host = "localhost"
+        self.host = "52.70.61.124"
         self.port = "3306"
         self.database = "cerebelle"
         self.engine = create_engine(
