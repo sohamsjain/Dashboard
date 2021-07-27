@@ -64,11 +64,11 @@ class ServerManager:
         except (ValueError, KeyError):
             pass
 
-    def receive_message(self, socket_):
+    def receive_message(self, socket):
         try:
 
             # Receive our "header" containing message length, it's size is defined and constant
-            message_header = socket_.recv(self.HEADER_LENGTH)
+            message_header = socket.recv(self.HEADER_LENGTH)
 
             # If we received no data, client gracefully closed a connection, for example using socket.close() or socket.shutdown(socket.SHUT_RDWR)
             if not len(message_header):
@@ -81,7 +81,7 @@ class ServerManager:
             chunks = []
             bytes_recd = 0
             while bytes_recd < message_length:
-                chunk = socket_.recv(min(message_length - bytes_recd, 2048))
+                chunk = socket.recv(min(message_length - bytes_recd, 2048))
                 if chunk == b'':
                     return False
                 chunks.append(chunk)
