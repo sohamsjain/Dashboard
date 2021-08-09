@@ -33,7 +33,8 @@ class Contract(Base):
 class Xone(Base):
     __tablename__ = 'xones'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    symbol = Column(String(64), ForeignKey('contracts.symbol'))
+    contract_id = Column(Integer, ForeignKey('contracts.id'))
+    symbol = Column(String(64))
     sectype = Column(String(8))
     btsymbol = Column(String(64))
     expiry = Column(DateTime)
@@ -48,8 +49,9 @@ class Xone(Base):
     status = Column(String(16), default=XoneStatus.CREATED)
     kid_count = Column(Integer)
     pnl = Column(Float, default=None)
-    contract = relationship("Contract", cascade="all")
-
+    contract = relationship("Contract")
+    children = relationship("Child", order_by="Child.id", back_populates='xone',
+                                 cascade="all, delete, delete-orphan")
     def start(self, **kwargs):
         self.isbullish = True if self.type == XoneType.BULLISH else False
         self.orders = list()
@@ -62,7 +64,8 @@ class Child(Base):
     __tablename__ = 'children'
     id = Column(Integer, primary_key=True, autoincrement=True)
     parent_id = Column(Integer, ForeignKey('xones.id'))
-    symbol = Column(String(64), ForeignKey('contracts.symbol'))
+    contract_id = Column(Integer, ForeignKey('contracts.id'))
+    symbol = Column(String(64))
     sectype = Column(String(8))
     btsymbol = Column(String(64))
     expiry = Column(DateTime)
@@ -81,14 +84,11 @@ class Child(Base):
     selling_commission = Column(Float, default=None)
     pnl = Column(Float, default=None)
     xone = relationship("Xone", back_populates="children")
-    contract = relationship("Contract", cascade="all")
+    contract = relationship("Contract")
 
     def start(self, **kwargs):
         self.isbuy = True if self.type == ChildType.BUY else False
         self.data = None
-
-
-Xone.children = relationship("Child", order_by=Child.id, back_populates='xone', cascade="all, delete, delete-orphan")
 
 
 class Db:
