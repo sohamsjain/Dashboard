@@ -93,6 +93,7 @@ class BaTMan:
             return f"Xone must have a child, none found"
 
         xone = Xone(
+            contract_id=contract.id,
             symbol=symbol,
             sectype=contract.sectype,
             btsymbol=contract.btsymbol,
@@ -135,6 +136,7 @@ class BaTMan:
 
             child = Child(
                 parent_id=xone.id,
+                contract_id=contract.id,
                 symbol=kidsymbol,
                 sectype=kidcontract.sectype,
                 btsymbol=kidcontract.btsymbol,
