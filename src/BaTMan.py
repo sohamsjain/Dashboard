@@ -293,6 +293,10 @@ class BaTMan:
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
 
+        if self.store.dontreconnect:
+            self.store.dontreconnect = False
+
+        del self.cerebro, self.store
         print("run thread ends: ")
 
 
