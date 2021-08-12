@@ -41,9 +41,13 @@ class Xone(Base):
     entry = Column(Float)
     stoploss = Column(Float)
     target = Column(Float)
-    entry_hit = Column(Boolean, default=lambda: False)
     type = Column(String(8))
+    forced_entry = Column(Boolean, default=False)
+    forced_exit = Column(Boolean, default=False)
+    autonomous = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
+    entry_at = Column(DateTime, default=None)
+    exit_at = Column(DateTime, default=None)
     opened_at = Column(DateTime, default=None)
     closed_at = Column(DateTime, default=None)
     status = Column(String(16), default=XoneStatus.CREATED)
@@ -51,11 +55,13 @@ class Xone(Base):
     pnl = Column(Float, default=None)
     contract = relationship("Contract")
     children = relationship("Child", order_by="Child.id", back_populates='xone',
-                                 cascade="all, delete, delete-orphan")
+                                 cascade="all, delete-orphan")
+
     def start(self, **kwargs):
         self.isbullish = True if self.type == XoneType.BULLISH else False
         self.orders = list()
         self.nextstatus = None
+        self.open_children = False
         self.close_children = False
         self.data = None
 
@@ -96,9 +102,9 @@ class Db:
     def __init__(self):
         self.dialect = "mysql"
         self.driver = "pymysql"
-        self.username = "soham"
+        self.username = "root"
         self.password = "Soham19jain98"
-        self.host = "52.70.61.124"
+        self.host = "localhost"
         self.port = "3306"
         self.database = "cerebelle"
         self.engine = create_engine(

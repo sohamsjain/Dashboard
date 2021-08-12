@@ -46,7 +46,7 @@ class BaTMan:
             schedule.run_pending()
             time.sleep(1)
 
-    def create(self, dictionary):
+    def createxone(self, dictionary):
         session = self.db.scoped_session()
 
         xonekwargs = {key: val for key, val in dictionary.items() if val != ''}
@@ -89,8 +89,8 @@ class BaTMan:
             return f"Target must be of type (float, int), found {type(target)} instead"
 
         children = xonekwargs.get('children', [])
-        if not children:
-            return f"Xone must have a child, none found"
+        # if not children:
+        #     return f"Xone must have a child, none found"
 
         xone = Xone(
             contract_id=contract.id,
@@ -172,11 +172,36 @@ class BaTMan:
 
         return "Xone Created Successfully"
 
-    def remove(self, xone):
+    def removexone(self, xone):
         xonesofakind = self.xonesbybtsymbol[xone.btsymbol]
         xonesofakind.remove(xone)
         if not xonesofakind:
             self.xonesbybtsymbol.pop(xone.btsymbol)
+
+        if xone in self.allxones:
+            self.allxones.remove(xone)
+
+        for child in xone.children:
+
+            if child in self.allchildren:
+                self.allchildren.remove(child)
+
+    # def deletexone(self, xone_id):
+    #     session = self.db.scoped_session()
+    #     xone = session.query(Xone).get(xone_id)
+    #
+    #     if xone is None:
+    #         return f"Xone with id {xone_id} does not exist"
+    #
+    #     if xone.status in XoneStatus.OPEN:
+    #         return f"Xone with id {xone_id} is in open state. Cannot delete an open xone"
+    #
+    #     if self.market:
+    #         self.removexone(xone)
+    #
+    #     session.delete()
+
+
 
     def getdata(self, btsymbol) -> Union[bt.feeds.IBData, Tuple[bt.feeds.IBData, bool]]:
 
@@ -212,7 +237,7 @@ class BaTMan:
 
         return data, dorestart
 
-    def add(self, xone):
+    def addxone(self, xone):
         if xone.btsymbol not in self.xonesbybtsymbol:
             self.xonesbybtsymbol[xone.btsymbol] = list()
 
@@ -256,9 +281,13 @@ class BaTMan:
                     Child.status == ChildStatus.SOLD)).all()
 
             self.allxones = self.session.query(Xone).filter(
-                or_(Xone.status == XoneStatus.CREATED, Xone.status == XoneStatus.OPEN)).all()
+                or_(Xone.status == XoneStatus.CREATED, Xone.status == XoneStatus.ENTRYHIT,
+                    Xone.status == XoneStatus.ENTRY, Xone.status == XoneStatus.STOPLOSSHIT,
+                    Xone.status == XoneStatus.TARGETHIT)).all()
 
-            self.openxones = self.session.query(Xone).filter(Xone.status == XoneStatus.OPEN).all()
+            self.openxones = self.session.query(Xone).filter(Xone.status == XoneStatus.ENTRY,
+                                                             Xone.status == XoneStatus.STOPLOSSHIT,
+                                                             Xone.status == XoneStatus.TARGETHIT).all()
 
             for xone in self.allxones:
                 xone.start()
@@ -268,7 +297,7 @@ class BaTMan:
                     child.start()
                     child.data = self.getdata(child.btsymbol)
 
-                self.add(xone)
+                self.addxone(xone)
 
             self.cerebro.setbroker(self.store.getbroker())
 
@@ -302,4 +331,3 @@ class BaTMan:
         print("run thread ends: ")
 
 
-batman = BaTMan()

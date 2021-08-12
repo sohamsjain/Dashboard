@@ -1,12 +1,16 @@
-import dash
-import dash_bootstrap_components as dbc
-from src.BaTMan import batman
-from src.models import *
+from flask import Flask
+from flask_restful import Resource, Api
+from src.BaTMan import BaTMan
+
+app = Flask(__name__)
+api = Api(app)
 
 
-# 'https://codepen.io/chriddyp/pen/bWLwgP.css',
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css', dbc.themes.BOOTSTRAP]
+class Xones:
+    pass
 
-db = Db()
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets, suppress_callback_exceptions=True)
-server = app.server
+
+class Children:
+    pass
+
+

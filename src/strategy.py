@@ -77,11 +77,11 @@ class Grid(bt.Strategy):
 
         if xone.orders == [None]:  # All child orders processed
 
-            if xone.status == XoneStatus.CREATED:
+            if xone.status in XoneStatus.PENDING:
 
                 self.openordercount -= 1
 
-                xone.status = XoneStatus.OPEN
+                xone.status = XoneStatus.ENTRY
                 xone.opened_at = datetime.now()
                 self.batman.openxones.append(xone)
 
@@ -90,18 +90,18 @@ class Grid(bt.Strategy):
                         xone.status = XoneStatus.ABORT
                         break
 
-            elif xone.status == XoneStatus.OPEN:
+            elif xone.status in XoneStatus.OPEN:
                 xone.closed_at = datetime.now()
                 xone.pnl = sum([c.pnl for c in xone.children if c.pnl is not None])
                 xone.status = xone.nextstatus
-                self.batman.remove(xone)
+                self.batman.removexone(xone)
                 self.batman.openxones.remove(xone)
 
             elif xone.status == XoneStatus.ABORT:
                 xone.closed_at = datetime.now()
                 xone.pnl = sum([c.pnl for c in xone.children if c.pnl is not None])
                 xone.status = XoneStatus.FORCECLOSED
-                self.batman.remove(xone)
+                self.batman.removexone(xone)
                 self.batman.openxones.remove(xone)
 
             xone.orders.clear()
@@ -129,7 +129,7 @@ class Grid(bt.Strategy):
 
         while not self.sessionq.empty():
             xone = self.sessionq.get()
-            self.batman.add(xone)
+            self.batman.addxone(xone)
             try:
                 if xone.data._dataname not in [d._dataname for d in self.datas]:
                     self.datas.append(xone.data)
@@ -156,82 +156,97 @@ class Grid(bt.Strategy):
                 except IndexError:
                     continue
 
-                if xone.status == XoneStatus.CREATED:
+                if xone.status in XoneStatus.PENDING:
+
                     if xone.isbullish:
-                        if xone.entry_hit and data.high[0] >= xone.target:
+                        if (xone.status == XoneStatus.ENTRYHIT) and (data.high[0] >= xone.target):
                             xone.status = XoneStatus.MISSED
                             for child in xone.children:
                                 child.status = ChildStatus.UNUSED
-                            self.batman.remove(xone)
+                            self.batman.removexone(xone)
                             continue
                         if data.low[0] < xone.stoploss:
                             xone.status = XoneStatus.FAILED
                             for child in xone.children:
                                 child.status = ChildStatus.UNUSED
-                            self.batman.remove(xone)
+                            self.batman.removexone(xone)
                             continue
                         if data.low[0] <= xone.entry:
-                            xone.entry_hit = True
-                            if (len(self.batman.openxones) + self.openordercount) < self.p.maxpos:
-                                self.openordercount += 1
-                                for child in xone.children:
-                                    size = child.size
-                                    if child.isbuy:
-                                        order = self.buy(data=child.data, size=size)
-                                    else:
-                                        order = self.sell(data=child.data, size=size)
-                                    xone.orders.append(order)
-                                    self.childrenbyorder[order.ref] = child
-                                xone.orders.append(None)
+                            if xone.status == XoneStatus.CREATED:
+                                xone.status = XoneStatus.ENTRYHIT
+                            if xone.autonomous:
+                                xone.open_children = True
 
                     else:
-                        if xone.entry_hit and data.low[0] <= xone.target:
+                        if (xone.status == XoneStatus.ENTRYHIT) and (data.low[0] <= xone.target):
                             xone.status = XoneStatus.MISSED
                             for child in xone.children:
                                 child.status = ChildStatus.UNUSED
-                            self.batman.remove(xone)
+                            self.batman.removexone(xone)
                             continue
                         if data.high[0] > xone.stoploss:
                             xone.status = XoneStatus.FAILED
                             for child in xone.children:
                                 child.status = ChildStatus.UNUSED
-                            self.batman.remove(xone)
+                            self.batman.removexone(xone)
                             continue
                         if data.high[0] >= xone.entry:
-                            xone.entry_hit = True
-                            if (len(self.batman.openxones) + self.openordercount) < self.p.maxpos:
-                                self.openordercount += 1
-                                for child in xone.children:
-                                    size = child.size
-                                    if child.isbuy:
-                                        order = self.buy(data=child.data, size=size)
-                                    else:
-                                        order = self.sell(data=child.data, size=size)
-                                    xone.orders.append(order)
-                                    self.childrenbyorder[order.ref] = child
-                                xone.orders.append(None)
+                            if xone.status == XoneStatus.CREATED:
+                                xone.status = XoneStatus.ENTRYHIT
+                            if xone.autonomous:
+                                xone.open_children = True
 
-                elif xone.status == XoneStatus.OPEN:
+                    if xone.open_children or xone.forced_entry:
+                        xone.open_children = False
+                        if (len(self.batman.openxones) + self.openordercount) < self.p.maxpos:
+                            self.openordercount += 1
+                            for child in xone.children:
+                                size = child.size
+                                if child.isbuy:
+                                    order = self.buy(data=child.data, size=size)
+                                else:
+                                    order = self.sell(data=child.data, size=size)
+                                xone.orders.append(order)
+                                self.childrenbyorder[order.ref] = child
+                            xone.orders.append(None)
+
+                elif xone.status in XoneStatus.OPEN:
 
                     if xone.isbullish:
                         if data.low[0] < xone.stoploss:
-                            xone.nextstatus = XoneStatus.STOPLOSS
-                            xone.close_children = True
+                            if xone.status == XoneStatus.ENTRY:
+                                xone.status = XoneStatus.STOPLOSSHIT
+
+                            if xone.autonomous:
+                                xone.nextstatus = XoneStatus.STOPLOSS
+                                xone.close_children = True
 
                         elif data.high[0] >= xone.target:
-                            xone.nextstatus = XoneStatus.TARGET
-                            xone.close_children = True
+                            if xone.status == XoneStatus.ENTRY:
+                                xone.status = XoneStatus.TARGETHIT
+
+                            if xone.autonomous:
+                                xone.nextstatus = XoneStatus.TARGET
+                                xone.close_children = True
 
                     else:
                         if data.high[0] > xone.stoploss:
-                            xone.nextstatus = XoneStatus.STOPLOSS
-                            xone.close_children = True
+                            if xone.status == XoneStatus.ENTRY:
+                                xone.status = XoneStatus.STOPLOSSHIT
+
+                            if xone.autonomous:
+                                xone.nextstatus = XoneStatus.STOPLOSS
+                                xone.close_children = True
 
                         elif data.low[0] <= xone.target:
-                            xone.nextstatus = XoneStatus.TARGET
-                            xone.close_children = True
+                            if xone.status == XoneStatus.ENTRY:
+                                xone.status = XoneStatus.TARGETHIT
 
-                    if xone.close_children:
+                            if xone.autonomous:
+                                xone.nextstatus = XoneStatus.TARGET
+                                xone.close_children = True
+
+                    if xone.close_children or xone.forced_exit:
                         xone.close_children = False
                         for child in xone.children:
                             if child.isbuy:
@@ -257,11 +272,11 @@ class Grid(bt.Strategy):
                         xone.closed_at = datetime.now()
                         xone.pnl = sum([c.pnl for c in xone.children if c.pnl is not None])
                         xone.status = XoneStatus.FORCECLOSED
-                        self.batman.remove(xone)
+                        self.batman.removexone(xone)
                         self.batman.openxones.remove(xone)
 
                 else:
-                    self.batman.remove(xone)
+                    self.batman.removexone(xone)
 
         self.batman.session.commit()
 
