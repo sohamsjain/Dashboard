@@ -14,7 +14,6 @@ class Grid(bt.Strategy):
 
     def __init__(self):
         self.batman = self.p.batman
-        self.order = None
         self.childrenbyorder = dict()
         self.openordercount = 0
         self.sessionq = Queue()
@@ -127,6 +126,8 @@ class Grid(bt.Strategy):
 
     def next(self):
 
+        self.batman.session.commit()
+
         while not self.sessionq.empty():
             xone = self.sessionq.get()
             self.batman.addxone(xone)
@@ -146,12 +147,12 @@ class Grid(bt.Strategy):
 
             for xone in xonesofakind:
 
-                if xone.orders:
+                if xone.orders:                     # Skip an iteration until pending orders are completed
                     continue
 
-                try:
-                    xd = xone.data.close[0]
-                    for child in xone.children:
+                try:                                # In case a new datafeed is added, it may not produce a bar
+                    xd = xone.data.close[0]         # This is a work around to eliminate unnecessary IndexError
+                    for child in xone.children:     # Must apply for xone.data as well as child.data
                         cd = child.data.close[0]
                 except IndexError:
                     continue

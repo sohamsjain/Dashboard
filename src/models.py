@@ -89,8 +89,8 @@ class Child(Base):
     selling_cost = Column(Float, default=None)
     selling_commission = Column(Float, default=None)
     pnl = Column(Float, default=None)
-    xone = relationship("Xone", back_populates="children")
     contract = relationship("Contract")
+    xone = relationship("Xone", back_populates="children")
 
     def start(self, **kwargs):
         self.isbuy = True if self.type == ChildType.BUY else False
