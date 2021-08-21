@@ -12,5 +12,3 @@ class Xones:
 
 class Children:
     pass
-
-

@@ -5,7 +5,7 @@ import schedule
 import traceback
 import time
 from threading import Thread
-from typing import List, Dict, Optional, Union, Tuple
+from typing import List, Dict, Optional
 import backtrader as bt
 from src.mysizer import MySizer
 from src.strategy import Grid
@@ -13,7 +13,7 @@ from src.constants import HOST, PORT, YESTERDAY
 from src.helpers import updatecontracts
 from src.models import Db, Child, Xone, Contract, scoped_session, NoResultFound, MultipleResultsFound, or_, \
     StatementError, OperationalError
-from src.util import ChildStatus, XoneType, ChildType, XoneStatus
+from src.util import ChildStatus, XoneType, ChildType, XoneStatus, RequestType, ResponseType
 
 
 class BaTMan:
@@ -30,8 +30,6 @@ class BaTMan:
 
         self.allxones: List[Xone] = list()
         self.openxones: List[Xone] = list()
-        self.allchildren: List[Child] = list()
-        self.xonesbybtsymbol: Dict[str, List[Xone]] = dict()
 
         self.market = False
         self.sessionq: Optional[Queue] = None
@@ -45,6 +43,14 @@ class BaTMan:
         while 1:
             schedule.run_pending()
             time.sleep(1)
+
+    def addxone(self, xone):
+        if xone not in self.allxones:
+            self.allxones.append(xone)
+
+    def removexone(self, xone):
+        if xone in self.allxones:
+            self.allxones.remove(xone)
 
     def createxone(self, dictionary):
         session = self.db.scoped_session()
@@ -89,8 +95,6 @@ class BaTMan:
             return f"Target must be of type (float, int), found {type(target)} instead"
 
         children = xonekwargs.get('children', [])
-        # if not children:
-        #     return f"Xone must have a child, none found"
 
         xone = Xone(
             contract_id=contract.id,
@@ -135,8 +139,7 @@ class BaTMan:
                 return "Size must be of type int"
 
             child = Child(
-                parent_id=xone.id,
-                contract_id=contract.id,
+                contract_id=kidcontract.id,
                 symbol=kidsymbol,
                 sectype=kidcontract.sectype,
                 btsymbol=kidcontract.btsymbol,
@@ -149,61 +152,166 @@ class BaTMan:
 
         xone.children = children_objects
 
-        session.add(xone)
-        session.commit()
-
         if self.market:
 
-            restart = False
             xone.start()
-            xone.data, dorestart = self.getdata(xone.btsymbol)
-            restart = dorestart if not restart and dorestart else restart
+            xone.data = self.getdata(xone.btsymbol)
 
             for child in xone.children:
                 child.start()
-                child.data, dorestart = self.getdata(child.btsymbol)
-                restart = dorestart if not restart and dorestart else restart
+                child.data = self.getdata(child.btsymbol)
 
-            if restart:
-                self.cerebro.runrestart()
+            q = Queue()
+            message = dict(head=RequestType.ADDXONE, body=xone, responseq=q)
+            self.sessionq.put(message)
 
-            session.expunge(xone)
-            self.sessionq.put(xone)
+            response = q.get()
+            if response == ResponseType.ADDXONESUCCESS:
+                return "Xone Created Successfully"
+            elif response == ResponseType.ADDXONEFAILURE:
+                return "Xone Could not be created"
 
-        return "Xone Created Successfully"
+        else:
+            session.add(xone)
+            session.commit()
+            return "Xone Created Successfully"
 
-    def removexone(self, xone):
-        xonesofakind = self.xonesbybtsymbol[xone.btsymbol]
-        xonesofakind.remove(xone)
-        if not xonesofakind:
-            self.xonesbybtsymbol.pop(xone.btsymbol)
+    def deletexone(self, xone_id):
+        session = self.db.scoped_session()
+        xone = session.query(Xone).get(xone_id)
 
-        if xone in self.allxones:
-            self.allxones.remove(xone)
+        if xone is None:
+            return f"Xone with id {xone_id} does not exist"
 
-        for child in xone.children:
+        if xone.status in XoneStatus.OPEN:
+            return f"Xone with id {xone_id} is in open state. Cannot delete an open xone"
 
-            if child in self.allchildren:
-                self.allchildren.remove(child)
+        if self.market:
+            q = Queue()
+            message = dict(head=RequestType.DELETEXONE, body=xone_id, responseq=q)
+            self.sessionq.put(message)
 
-    # def deletexone(self, xone_id):
-    #     session = self.db.scoped_session()
-    #     xone = session.query(Xone).get(xone_id)
-    #
-    #     if xone is None:
-    #         return f"Xone with id {xone_id} does not exist"
-    #
-    #     if xone.status in XoneStatus.OPEN:
-    #         return f"Xone with id {xone_id} is in open state. Cannot delete an open xone"
-    #
-    #     if self.market:
-    #         self.removexone(xone)
-    #
-    #     session.delete()
+            response = q.get()
+            if response == ResponseType.DELETEXONESUCCESS:
+                return f"Xone with id {xone_id} deleted successfully"
+            elif response == ResponseType.DELETEXONEFAILURE:
+                return f"Xone with id {xone_id} could not be deleted"
+        else:
+            session.delete(xone)
+            session.commit()
 
+            return f"Xone with id {xone_id} deleted successfully"
 
+    def addchild(self, dictionary):
+        session = self.db.scoped_session()
 
-    def getdata(self, btsymbol) -> Union[bt.feeds.IBData, Tuple[bt.feeds.IBData, bool]]:
+        kidkwargs = {key: val for key, val in dictionary.items() if val != ''}
+
+        xone_id = kidkwargs.get('xone_id', None)
+
+        if not xone_id:
+            return "Missing attribute xone_id"
+
+        xone = session.query(Xone).get(xone_id)
+
+        if xone is None:
+            return f"Xone with id {xone_id} does not exist"
+
+        if xone.status in XoneStatus.OPEN:
+            return f"Xone with id {xone_id} is in open state. Cannot add a child to an open xone"
+
+        if xone.status in XoneStatus.CLOSED:
+            return f"Xone with id {xone_id} is in closed state. Cannot add a child to a closed xone"
+
+        if "symbol" not in kidkwargs:
+            return f"Missing Child Attribute: symbol"
+
+        kidsymbol = kidkwargs['symbol']
+        if not isinstance(kidsymbol, str):
+            return f"symbol must be a string: {kidsymbol}"
+        kidsymbol = kidsymbol.upper()
+
+        try:
+            kidcontract = session.query(Contract).filter(Contract.symbol == kidsymbol).one()
+        except NoResultFound:
+            return f"Invalid Symbol: {kidsymbol}"
+        except MultipleResultsFound:
+            return f"Multiple Contracts found for Symbol: {kidsymbol}"
+
+        kidtype = kidkwargs.get("type", None)
+        if kidtype is None:
+            kidtype = ChildType.BUY if xone.type == XoneType.BULLISH else ChildType.SELL
+            kidtype = ChildType.invert(kidtype) if kidcontract.right == "P" else kidtype
+
+        size = kidkwargs.get('size', None)
+        if size and not isinstance(size, int):
+            return "Size must be of type int"
+
+        child = Child(
+            parent_id=xone.id,
+            contract_id=kidcontract.id,
+            symbol=kidsymbol,
+            sectype=kidcontract.sectype,
+            btsymbol=kidcontract.btsymbol,
+            expiry=kidcontract.expiry,
+            type=kidtype,
+            size=size
+        )
+
+        if self.market:
+
+            child.start()
+            child.data = self.getdata(child.btsymbol)
+
+            q = Queue()
+            body = dict(child=child, xone_id=xone_id)
+            message = dict(head=RequestType.ADDCHILD, body=body, responseq=q)
+            self.sessionq.put(message)
+
+            response = q.get()
+            if response == ResponseType.ADDCHILDSUCCESS:
+                return "Child created successfully"
+            elif response == ResponseType.ADDCHILDFAILURE:
+                return "Child could not be created"
+
+        else:
+            xone.children.append(child)
+            xone.kid_count += 1
+            session.commit()
+            return "Child created Successfully"
+
+    def deletechild(self, child_id):
+        session = self.db.scoped_session()
+        child = session.query(Child).get(child_id)
+
+        if child is None:
+            return f"Child with id {child_id} does not exist"
+
+        if child.status in ChildStatus.OPEN:
+            return f"Child with id {child_id} is in open state. Cannot delete an open child"
+
+        if child.status in ChildStatus.CLOSED:
+            return f"Child with id {child_id} is in closed state. Cannot delete a closed child"
+
+        if self.market:
+            q = Queue()
+            message = dict(head=RequestType.DELETECHILD, body=child_id, responseq=q)
+            self.sessionq.put(message)
+
+            response = q.get()
+            if response == ResponseType.DELETECHILDSUCCESS:
+                return f"Child with id {child_id} deleted successfully"
+            elif response == ResponseType.DELETECHILDFAILURE:
+                return f"Child with id {child_id} could not be deleted"
+        else:
+            xone = child.xone
+            xone.children.remove(child)
+            xone.kid_count -= 1
+            session.commit()
+
+            return f"Child with id {child_id} deleted successfully"
+
+    def getdata(self, btsymbol) -> bt.feeds.IBData:
 
         data = None
         dorestart = False
@@ -214,7 +322,7 @@ class BaTMan:
         if data is None:
             data = self.store.getdata(dataname=btsymbol, rtbar=True, backfill_start=False)
             self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Seconds, compression=5)
-            # data = self.store.getdata(dataname=btsymbol, historical=True)  # , fromdate=yesterday)
+            # data = self.store.getdata(dataname=btsymbol, historical=True)  # , fromdate=YESTERDAY)
             # self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Minutes, compression=1)
             self.alldatas[btsymbol] = data
             dorestart = True
@@ -223,7 +331,7 @@ class BaTMan:
             return data
 
         if not dorestart:
-            return data, dorestart
+            return data
 
         data.reset()
 
@@ -235,35 +343,16 @@ class BaTMan:
         if self.cerebro._dopreload:
             data.preload()
 
-        return data, dorestart
+        self.cerebro.runrestart()
 
-    def addxone(self, xone):
-        if xone.btsymbol not in self.xonesbybtsymbol:
-            self.xonesbybtsymbol[xone.btsymbol] = list()
-
-        self.xonesbybtsymbol[xone.btsymbol].append(xone)
-
-        if xone._sa_instance_state.session is None:
-            self.session.add(xone)
-
-        if xone not in self.allxones:
-            self.allxones.append(xone)
-
-        for child in xone.children:
-
-            if child not in self.allchildren:
-                self.allchildren.append(child)
-
-            if child._sa_instance_state.session is None:
-                self.session.add(child)
+        return data
 
     def run(self):
         try:
             self.alldatas.clear()
             self.allxones.clear()
             self.openxones.clear()
-            self.allchildren.clear()
-            self.xonesbybtsymbol.clear()
+            self.market = False
 
             if datetime.now().date().weekday() not in range(5):
                 print("Happy Holiday")
@@ -274,11 +363,11 @@ class BaTMan:
             self.cerebro = bt.Cerebro()
 
             self.store = bt.stores.IBStore(host=HOST, port=PORT)
-            self.getdata("INFY_STK_NSE")
 
-            self.allchildren = self.session.query(Child).filter(
-                or_(Child.status == ChildStatus.CREATED, Child.status == ChildStatus.BOUGHT,
-                    Child.status == ChildStatus.SOLD)).all()
+            if self.store.dontreconnect:
+                self.store.dontreconnect = False
+
+            self.getdata("INFY_STK_NSE")
 
             self.allxones = self.session.query(Xone).filter(
                 or_(Xone.status == XoneStatus.CREATED, Xone.status == XoneStatus.ENTRYHIT,
@@ -324,10 +413,5 @@ class BaTMan:
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
 
-        if self.store.dontreconnect:
-            self.store.dontreconnect = False
-
         del self.cerebro, self.store
         print("run thread ends: ")
-
-
