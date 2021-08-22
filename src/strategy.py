@@ -19,9 +19,13 @@ class Grid(bt.Strategy):
         self.sessionq = Queue()
         self.db = self.batman.db
         self.session = self.batman.session
+        self.addxone = self.batman.addxone
         self.removexone = self.batman.removexone
+        self.addchild = self.batman.addchild
+        self.removechild = self.batman.removechild
         self.openxones = self.batman.openxones
         self.allxones = self.batman.allxones
+        self.allchildren = self.batman.allchildren
 
     def notify_order(self, order):
 
@@ -291,7 +295,7 @@ class Grid(bt.Strategy):
 
                 try:
                     self.session.add(xone)
-                    self.batman.addxone(xone)
+                    self.addxone(xone)
                     self.session.commit()
                 except Exception as e:
                     print(e)
@@ -329,6 +333,7 @@ class Grid(bt.Strategy):
                         continue
                     xone.children.append(child)
                     xone.kid_count += 1
+                    self.addchild(child)
                     self.session.commit()
                 except Exception as e:
                     print(e)
@@ -348,6 +353,7 @@ class Grid(bt.Strategy):
                         continue
                     xone.children.remove(child)
                     xone.kid_count -= 1
+                    self.removechild(child)
                     # self.batman.session.delete(child)  # Redundant statement. orphan child gets deleted by default
                     self.session.commit()
                 except Exception as e:

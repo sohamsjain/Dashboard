@@ -29,6 +29,7 @@ class BaTMan:
         self.alldatas: Dict[str, bt.feeds.IBData] = dict()
 
         self.allxones: List[Xone] = list()
+        self.allchildren: List[Child] = list()
         self.openxones: List[Xone] = list()
 
         self.market = False
@@ -48,9 +49,23 @@ class BaTMan:
         if xone not in self.allxones:
             self.allxones.append(xone)
 
+        for child in xone.children:
+            self.addchild(child)
+
     def removexone(self, xone):
         if xone in self.allxones:
             self.allxones.remove(xone)
+
+        for child in xone.children:
+            self.removechild(child)
+
+    def addchild(self, child):
+        if child not in self.allchildren:
+            self.allchildren.append(child)
+
+    def removechild(self, child):
+        if child in self.allchildren:
+            self.allchildren.remove(child)
 
     def createxone(self, dictionary):
         session = self.db.scoped_session()
@@ -202,7 +217,7 @@ class BaTMan:
 
             return f"Xone with id {xone_id} deleted successfully"
 
-    def addchild(self, dictionary):
+    def createchild(self, dictionary):
         session = self.db.scoped_session()
 
         kidkwargs = {key: val for key, val in dictionary.items() if val != ''}
@@ -322,7 +337,7 @@ class BaTMan:
         if data is None:
             data = self.store.getdata(dataname=btsymbol, rtbar=True, backfill_start=False)
             self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Seconds, compression=5)
-            # data = self.store.getdata(dataname=btsymbol, historical=True)  # , fromdate=YESTERDAY)
+            # data = self.store.getdata(dataname=btsymbol, historical=True, fromdate=YESTERDAY)
             # self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Minutes, compression=1)
             self.alldatas[btsymbol] = data
             dorestart = True
@@ -351,6 +366,7 @@ class BaTMan:
         try:
             self.alldatas.clear()
             self.allxones.clear()
+            self.allchildren.clear()
             self.openxones.clear()
             self.market = False
 
@@ -368,6 +384,10 @@ class BaTMan:
                 self.store.dontreconnect = False
 
             self.getdata("INFY_STK_NSE")
+
+            self.allchildren = self.session.query(Child).filter(
+                or_(Child.status == ChildStatus.CREATED, Child.status == ChildStatus.BOUGHT,
+                    Child.status == ChildStatus.SOLD)).all()
 
             self.allxones = self.session.query(Xone).filter(
                 or_(Xone.status == XoneStatus.CREATED, Xone.status == XoneStatus.ENTRYHIT,
