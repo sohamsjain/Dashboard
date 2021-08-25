@@ -201,6 +201,9 @@ class BaTMan:
         if xone.status in XoneStatus.OPEN:
             return f"Xone with id {xone_id} is in open state. Cannot delete an open xone"
 
+        if xone.status in XoneStatus.CLOSED:
+            return f"Xone with id {xone_id} is in closed state. Cannot delete a closed xone"
+
         if self.market:
             q = Queue()
             message = dict(head=RequestType.DELETEXONE, body=xone_id, responseq=q)

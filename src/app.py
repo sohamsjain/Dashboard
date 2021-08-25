@@ -63,4 +63,4 @@ api.add_resource(Xones, '/xones')
 api.add_resource(Children, '/children')
 
 if __name__ == '__main__':
-    app.run()
+    app.run(host="0.0.0.0")

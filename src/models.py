@@ -25,6 +25,7 @@ class Contract(Base):
     expiry = Column(DateTime)
     multiplier = Column(Integer)
     btsymbol = Column(String(64))
+    lotsize = Column(Integer)
 
     def start(self, **kwargs):
         pass

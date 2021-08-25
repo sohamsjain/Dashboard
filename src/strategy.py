@@ -53,7 +53,7 @@ class Grid(bt.Strategy):
                     child.opened_at = datetime.now()
                 else:
                     child.filled += order.executed.size
-                    child.status = ChildStatus.CLOSED
+                    child.status = ChildStatus.SQUAREDOFF
                     child.closed_at = datetime.now()
                     child.pnl = child.selling_cost - child.buying_cost
 
@@ -65,7 +65,7 @@ class Grid(bt.Strategy):
 
                 if child.isbuy:
                     child.filled += order.executed.size
-                    child.status = ChildStatus.CLOSED
+                    child.status = ChildStatus.SQUAREDOFF
                     child.closed_at = datetime.now()
                     child.pnl = child.selling_cost - child.buying_cost
                 else:
@@ -194,6 +194,8 @@ class Grid(bt.Strategy):
 
                 if xone.open_children or xone.forced_entry:
                     xone.open_children = False
+                    if not xone.children:
+                        continue
                     if (len(self.openxones) + self.openordercount) < self.p.maxpos:
                         self.openordercount += 1
                         for child in xone.children:
@@ -306,7 +308,7 @@ class Grid(bt.Strategy):
 
             if head == RequestType.DELETEXONE:
                 try:
-                    xone_id = body['xone_id']
+                    xone_id = body
                     xone = self.session.query(Xone).get(xone_id)
                     if xone.orders:
                         print(f"Xone {xone_id} has open orders, it cannot be deleted")
@@ -344,7 +346,7 @@ class Grid(bt.Strategy):
 
             if head == RequestType.DELETECHILD:
                 try:
-                    child_id = body['child_id']
+                    child_id = body
                     child = self.session.query(Child).get(child_id)
                     xone = child.xone
                     if xone.orders:
