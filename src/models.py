@@ -8,7 +8,6 @@ from sqlalchemy.exc import StatementError, OperationalError
 
 from src.util import *
 
-
 Base = declarative_base()
 
 
@@ -42,6 +41,7 @@ class Xone(Base):
     entry = Column(Float)
     stoploss = Column(Float)
     target = Column(Float)
+    lastprice = Column(Float, default=None)
     type = Column(String(8))
     forced_entry = Column(Boolean, default=False)
     forced_exit = Column(Boolean, default=False)
@@ -73,6 +73,7 @@ class Child(Base):
     parent_id = Column(Integer, ForeignKey('xones.id'))
     contract_id = Column(Integer, ForeignKey('contracts.id'))
     symbol = Column(String(64))
+    lastprice = Column(Float, default=None)
     sectype = Column(String(8))
     btsymbol = Column(String(64))
     expiry = Column(DateTime)

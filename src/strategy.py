@@ -140,14 +140,14 @@ class Grid(bt.Strategy):
         for xone in self.allxones:
             data = xone.data
 
-            if xone.orders:  # Skip an iteration until pending orders are completed
+            try:  # In case a new datafeed is added, it may not produce a bar
+                xone.lastprice = xone.data.close[0]  # This is a work around to eliminate unnecessary IndexError
+                for child in xone.children:  # Must apply for xone.data as well as child.data
+                    child.lastprice = child.data.close[0]
+            except IndexError:
                 continue
 
-            try:  # In case a new datafeed is added, it may not produce a bar
-                xd = xone.data.close[0]  # This is a work around to eliminate unnecessary IndexError
-                for child in xone.children:  # Must apply for xone.data as well as child.data
-                    cd = child.data.close[0]
-            except IndexError:
+            if xone.orders:  # Skip an iteration until pending orders are completed
                 continue
 
             if xone.status in XoneStatus.PENDING:
