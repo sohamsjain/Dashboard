@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
 from queue import Queue
 import backtrader as bt
 from src.models import *
+from src.constants import SESSIONSTOP
 
 
 class Grid(bt.Strategy):
@@ -283,6 +284,9 @@ class Grid(bt.Strategy):
         self.session.commit()
 
         self.handlerequests()
+
+        if self.datas[0].datetime.time(0) >= SESSIONSTOP:
+            self.cerebro.runstop()
 
     def handlerequests(self):
 

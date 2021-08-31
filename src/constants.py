@@ -2,8 +2,9 @@ import datetime
 
 
 # Session Time Boundry
-SESSIONSTART = datetime.datetime.now().time().replace(hour=9, minute=15, second=0, microsecond=0)
-SESSIONEND = datetime.datetime.now().time().replace(hour=14, minute=22, second=0, microsecond=0)
+SESSIONSTART = datetime.time(9, 15)
+SESSIONEND = datetime.time(15, 30)
+SESSIONSTOP = datetime.time(15, 29, 55)
 
 YESTERDAY = datetime.datetime.now().date() - datetime.timedelta(days=5)
 

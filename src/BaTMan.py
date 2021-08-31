@@ -9,7 +9,7 @@ from typing import List, Dict, Optional
 import backtrader as bt
 from src.mysizer import MySizer
 from src.strategy import Grid
-from src.constants import HOST, PORT, YESTERDAY
+from src.constants import HOST, PORT, YESTERDAY, SESSIONSTART, SESSIONEND
 from src.helpers import updatecontracts
 from src.models import Db, Child, Xone, Contract, scoped_session, NoResultFound, MultipleResultsFound, or_, \
     StatementError, OperationalError
@@ -121,7 +121,8 @@ class BaTMan:
             stoploss=stoploss,
             target=target,
             type=XoneType.identify(entry, stoploss),
-            kid_count=len(children)
+            autonomous=xonekwargs.get('autonomous', True),
+            kid_count=len(children),
         )
 
         children_objects = list()
@@ -190,6 +191,103 @@ class BaTMan:
             session.add(xone)
             session.commit()
             return "Xone Created Successfully"
+
+    def updatexone(self, dictionary):
+        updatekwargs = {key: val for key, val in dictionary.items() if val != ''}
+
+        xone_id = updatekwargs.get('xone_id', None)
+        if xone_id is None:
+            return f"Missing Xone Attribute: xone_id"
+        if not isinstance(xone_id, int):
+            return f"xone_id must be a int: {xone_id}"
+
+        session = self.db.scoped_session()
+        xone = session.query(Xone).get(xone_id)
+
+        entry = updatekwargs.get('entry', None)
+        if entry is not None:
+
+            if not isinstance(entry, float):
+                return f"entry must be a float: {entry}"
+
+            if xone.status not in XoneStatus.PENDING:
+                return f"can't modify entry in XoneStatus: {xone.status}"
+
+            xone.entry = entry
+            if xone.status == XoneStatus.ENTRYHIT:
+                if xone.type == XoneType.BULLISH:
+                    if entry < xone.lastprice:
+                        xone.status = XoneStatus.CREATED
+                else:
+                    if entry > xone.lastprice:
+                        xone.status = XoneStatus.CREATED
+
+        stoploss = updatekwargs.get('stoploss', None)
+        if stoploss is not None:
+
+            if not isinstance(stoploss, float):
+                return f"stoploss must be a float: {stoploss}"
+
+            if xone.status in XoneStatus.CLOSED:
+                return f"can't modify stoploss in XoneStatus: {xone.status}"
+
+            xone.stoploss = stoploss
+            if xone.status == XoneStatus.STOPLOSSHIT:
+                if xone.type == XoneType.BULLISH:
+                    if stoploss < xone.lastprice:
+                        xone.status = XoneStatus.ENTRY
+                else:
+                    if stoploss > xone.lastprice:
+                        xone.status = XoneStatus.ENTRY
+
+        target = updatekwargs.get('target', None)
+        if target is not None:
+
+            if not isinstance(target, float):
+                return f"target must be a float: {target}"
+
+            if xone.status in XoneStatus.CLOSED:
+                return f"can't modify target in XoneStatus: {xone.status}"
+
+            xone.target = target
+            if xone.status == XoneStatus.TARGETHIT:
+                if xone.type == XoneType.BULLISH:
+                    if target > xone.lastprice:
+                        xone.status = XoneStatus.ENTRY
+                else:
+                    if target < xone.lastprice:
+                        xone.status = XoneStatus.ENTRY
+
+        autonomous = updatekwargs.get('autonomous', None)
+        if autonomous is not None:
+            if not isinstance(autonomous, bool):
+                return f"autonomous must be a bool: {autonomous}"
+
+            xone.autonomous = autonomous
+
+        forced_entry = updatekwargs.get('forced_entry', None)
+        if forced_entry is not None:
+            if not isinstance(forced_entry, bool):
+                return f"forced_entry must be a bool: {forced_entry}"
+
+            if xone.status not in XoneStatus.PENDING:
+                return f"can't force entry in XoneStatus: {xone.status}"
+
+            xone.forced_entry = forced_entry
+
+        forced_exit = updatekwargs.get('forced_exit', None)
+        if forced_exit is not None:
+            if not isinstance(forced_exit, bool):
+                return f"forced_exit must be a bool: {forced_exit}"
+
+            if xone.status not in XoneStatus.OPEN:
+                return f"can't force exit in XoneStatus: {xone.status}"
+
+            xone.forced_exit = forced_exit
+
+        session.commit()
+        session.close()
+        return "Update Successful"
 
     def deletexone(self, xone_id):
         session = self.db.scoped_session()
@@ -298,6 +396,39 @@ class BaTMan:
             session.commit()
             return "Child created Successfully"
 
+    def updatechild(self, dictionary):
+        updatekwargs = {key: val for key, val in dictionary.items() if val != ''}
+
+        child_id = updatekwargs.get('child_id', None)
+
+        if child_id is None:
+            return f"Missing Child Attribute: child_id"
+
+        if not isinstance(child_id, int):
+            return f"child_id must be a int: {child_id}"
+
+        session = self.db.scoped_session()
+        child = session.query(Child).get(child_id)
+
+        size = updatekwargs.get('size', None)
+        if size is not None:
+
+            if not isinstance(size, int):
+                return f"size must be a int: {size}"
+
+            if child.status not in ChildStatus.CREATED:
+                return f"can't modify size in ChildStatus: {child.status}"
+
+            lotsize = child.contract.lotsize
+            if not size % child.contract.lotsize == 0:
+                return f"size must be a multiple of lotsize: {lotsize}"
+
+            child.size = size
+
+        session.commit()
+        session.close()
+        return "Update Successful"
+
     def deletechild(self, child_id):
         session = self.db.scoped_session()
         child = session.query(Child).get(child_id)
@@ -338,7 +469,8 @@ class BaTMan:
             data = self.alldatas[btsymbol]
 
         if data is None:
-            data = self.store.getdata(dataname=btsymbol, rtbar=True, backfill_start=False)
+            data = self.store.getdata(dataname=btsymbol, rtbar=True, backfill_start=False, sessionstart=SESSIONSTART,
+                                      sessionend=SESSIONEND)
             self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Seconds, compression=5)
             # data = self.store.getdata(dataname=btsymbol, historical=True, fromdate=YESTERDAY)
             # self.cerebro.resampledata(data, timeframe=bt.TimeFrame.Minutes, compression=1)
