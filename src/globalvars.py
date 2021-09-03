@@ -1,4 +1,5 @@
 import pandas as pd
+from src.myapp import db
 
 contracts = list()
 tickers = list()
