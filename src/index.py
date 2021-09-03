@@ -1,19 +1,54 @@
-import dash_html_components as html
-import dash_bootstrap_components as dbc
-from src.app import app
-from src.components.searchcontract import *
-from src.components.table import *
+from src.myapp import *
+from src.accordiontest import createxonecomponents
+import src.callbacks
+from src.createxoneform import createxonemodal
+from src.addchildform import addchildmodal
+import src.globalvars as gvars
+
+
+navbar = html.Div(
+    [
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.NavbarBrand("Swayam Capital", className=m3, style={"font-size": "20px", "color": "white"})),
+                dbc.Col(
+                    dbc.Button(
+                        "Create Xone", color="primary", n_clicks=0, id="createxone-button"
+                    ),
+                    width=1
+                ),
+            ],
+            align="center",
+            justify="between"
+        ),
+    ],
+    style={"background-color": "black"}
+)
+
+
+def refreshcontracts():
+    gvars.contracts = pd.read_sql_table("contracts", db.engine)
+    gvars.tickers = gvars.contracts.query("sectype!='OPT'")["symbol"].to_list()
 
 
 def serve_layout():
-    return html.Div(children=[
-    dbc.Row(children=[
-        dbc.Col(children=[entry_form], width=3),
-        dbc.Col(children=[xones, interval, children], width=9)
-    ])
-])
+    global xonecomponents
+    session = db.scoped_session()
+    xones = session.query(Xone).all()
+    gvars.xonecomponents = [createxonecomponents(xone) for xone in xones]
+    accordion = html.Div(
+        gvars.xonecomponents,
+        className="accordion m-3",
+        id="xone-container"
+    )
+    session.close()
+    return html.Div([navbar, accordion, createxonemodal, addchildmodal])
 
-app.layout = serve_layout
 
 if __name__ == '__main__':
-    app.run_server(host="0.0.0.0")
+
+    refreshcontracts()
+    app.layout = serve_layout
+
+    app.run_server(debug=True)
