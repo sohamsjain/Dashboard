@@ -122,7 +122,7 @@ class BaTMan:
             target=target,
             type=XoneType.identify(entry, stoploss),
             autonomous=xonekwargs.get('autonomous', True),
-            kid_count=len(children),
+            kid_count=len(children) if children is not None else 0
         )
 
         children_objects = list()
