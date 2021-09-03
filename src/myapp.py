@@ -4,7 +4,6 @@ import dash_bootstrap_components as dbc
 import dash_core_components as dcc
 from dash_daq.BooleanSwitch import BooleanSwitch
 import dash_html_components as html
-import pandas as pd
 
 from src.models import Db, Xone, Child
 from src.styles import *

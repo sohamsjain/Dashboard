@@ -27,11 +27,6 @@ navbar = html.Div(
 )
 
 
-def refreshcontracts():
-    gvars.contracts = pd.read_sql_table("contracts", db.engine)
-    gvars.tickers = gvars.contracts.query("sectype!='OPT'")["symbol"].to_list()
-
-
 def serve_layout():
     global xonecomponents
     session = db.scoped_session()
@@ -48,7 +43,6 @@ def serve_layout():
 
 if __name__ == '__main__':
 
-    refreshcontracts()
     app.layout = serve_layout
 
     app.run_server(debug=True)
