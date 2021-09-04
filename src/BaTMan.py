@@ -193,7 +193,7 @@ class BaTMan:
             return f"Xone Created Successfully {xone.id}"
 
     def updatexone(self, dictionary):
-        updatekwargs = {key: val for key, val in dictionary.items() if val != ''}
+        updatekwargs = {key: val for key, val in dictionary.items() if val}
 
         xone_id = updatekwargs.get('xone_id', None)
         if xone_id is None:
@@ -321,7 +321,7 @@ class BaTMan:
     def createchild(self, dictionary):
         session = self.db.scoped_session()
 
-        kidkwargs = {key: val for key, val in dictionary.items() if val != ''}
+        kidkwargs = {key: val for key, val in dictionary.items() if val}
 
         xone_id = kidkwargs.get('xone_id', None)
 
@@ -397,7 +397,7 @@ class BaTMan:
             return "Child created Successfully"
 
     def updatechild(self, dictionary):
-        updatekwargs = {key: val for key, val in dictionary.items() if val != ''}
+        updatekwargs = {key: val for key, val in dictionary.items() if val}
 
         child_id = updatekwargs.get('child_id', None)
 
