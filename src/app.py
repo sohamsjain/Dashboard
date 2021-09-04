@@ -19,7 +19,7 @@ class Xones(Resource):
         parser.add_argument("entry", type=float, required=True)
         parser.add_argument("stoploss", type=float, required=True)
         parser.add_argument("target", type=float, required=True)
-        parser.add_argument("children", type=list, required=True, location='json')
+        parser.add_argument("children", type=list, required=False, location='json')
         parser.add_argument("autonomous", type=bool, required=False)
         args = parser.parse_args()
         response = bat.createxone(args)

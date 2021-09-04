@@ -13,15 +13,25 @@ import src.globalvars as gvars
 ###################
 
 
-@app.callback(
+app.clientside_callback(
+    """
+    function(clicks, state) {
+        if (clicks > 0) {
+            return ! state
+        }
+        else {
+            return state
+        }
+    }
+    """,
     Output(dict(object="xone", component="collapse", id=MATCH), "is_open"),
     Input(dict(object="xone", component="symbol-button", id=MATCH), "n_clicks"),
     State(dict(object="xone", component="collapse", id=MATCH), "is_open"),
 )
-def togglecollapse(clicks, state):
-    if clicks:
-        return not state
-    return state
+# def togglecollapse(clicks, state):
+#     if clicks:
+#         return not state
+#     return state
 
 
 @app.callback(

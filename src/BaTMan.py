@@ -70,7 +70,7 @@ class BaTMan:
     def createxone(self, dictionary):
         session = self.db.scoped_session()
 
-        xonekwargs = {key: val for key, val in dictionary.items() if val != ''}
+        xonekwargs = {key: val for key, val in dictionary.items() if val}
 
         for attr in ["symbol", "entry", "stoploss"]:
             if attr not in xonekwargs:
