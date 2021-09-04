@@ -282,10 +282,13 @@ def adddeletexone(submit, deletes, ticker, entry, stoploss, target, autonomous):
 
     propdict = eval(propstr)
     id = propdict['id']
-    todelete = list(filter(lambda x: x.id['id'] == id, gvars.xonecomponents))[0]
-    gvars.xonecomponents.remove(todelete)
-    gvars.childcomponentsbyxoneid.pop(id)
-    return [dash.no_update] * 6 + [gvars.xonecomponents]
+    response = XoneRequests.delete(xone_id=id)
+    if "success" in response.lower():
+        todelete = list(filter(lambda x: x.id['id'] == id, gvars.xonecomponents))[0]
+        gvars.xonecomponents.remove(todelete)
+        gvars.childcomponentsbyxoneid.pop(id)
+        return [dash.no_update] * 6 + [gvars.xonecomponents]
+    return [dash.no_update] * 7
 
 
 
