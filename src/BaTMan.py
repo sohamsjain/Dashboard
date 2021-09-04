@@ -190,7 +190,7 @@ class BaTMan:
         else:
             session.add(xone)
             session.commit()
-            return "Xone Created Successfully"
+            return f"Xone Created Successfully {xone.id}"
 
     def updatexone(self, dictionary):
         updatekwargs = {key: val for key, val in dictionary.items() if val != ''}
