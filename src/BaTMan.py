@@ -183,7 +183,8 @@ class BaTMan:
 
             response = q.get()
             if response == ResponseType.ADDXONESUCCESS:
-                return "Xone Created Successfully"
+                xid = q.get()
+                return f"Xone Created Successfully {xid}"
             elif response == ResponseType.ADDXONEFAILURE:
                 return "Xone Could not be created"
 
@@ -386,7 +387,8 @@ class BaTMan:
 
             response = q.get()
             if response == ResponseType.ADDCHILDSUCCESS:
-                return "Child created successfully"
+                cid = q.get()
+                return f"Child created Successfully {cid}"
             elif response == ResponseType.ADDCHILDFAILURE:
                 return "Child could not be created"
 
@@ -394,7 +396,7 @@ class BaTMan:
             xone.children.append(child)
             xone.kid_count += 1
             session.commit()
-            return "Child created Successfully"
+            return f"Child created Successfully {child.id}"
 
     def updatechild(self, dictionary):
         updatekwargs = {key: val for key, val in dictionary.items() if val != ''}
@@ -568,5 +570,4 @@ class BaTMan:
             exc_info = sys.exc_info()
             traceback.print_exception(*exc_info)
 
-        del self.cerebro, self.store
         print("run thread ends: ")
