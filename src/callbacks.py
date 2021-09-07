@@ -292,6 +292,7 @@ def adddeletexone(submit, deletes, ticker, entry, stoploss, target, autonomous):
             session = db.scoped_session()
             newxone = session.query(Xone).get(newxoneid)
             newcomponent = createxonecomponents(newxone)
+            session.close()
             gvars.xonecomponents.insert(0, newcomponent)
             updatedxonecomponents = gvars.xonecomponents
         return None, None, None, True, response, color, updatedxonecomponents
@@ -366,6 +367,7 @@ def addchild(_, ticker, size, type, xoneid):
         session = db.scoped_session()
         newchild = session.query(Child).get(newchildid)
         newcomponent = createchildcomponents(newchild)
+        session.close()
         gvars.childcomponentsbyxoneid[xoneid].append(newcomponent)
         updatedchildcomponents = html.Div(
             gvars.childcomponentsbyxoneid[xoneid],

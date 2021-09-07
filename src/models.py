@@ -116,4 +116,3 @@ class Db:
         Base.metadata.create_all(self.engine)
         self.session_factory = sessionmaker(bind=self.engine)
         self.scoped_session = scoped_session(self.session_factory)
-        self.session = self.scoped_session()
