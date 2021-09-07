@@ -26,6 +26,12 @@ navbar = html.Div(
     style={"background-color": "black"}
 )
 
+interval = dcc.Interval(
+        id="interval",
+        interval=1000 * 3,
+        n_intervals=0,
+    )
+
 
 def serve_layout():
     global xonecomponents
@@ -38,11 +44,11 @@ def serve_layout():
         id="xone-container"
     )
     session.close()
-    return html.Div([navbar, accordion, createxonemodal, addchildmodal])
+    return html.Div([navbar, accordion, createxonemodal, addchildmodal, interval])
 
 
 if __name__ == '__main__':
 
     app.layout = serve_layout
 
-    app.run_server(host="0.0.0.0", debug=True)
+    app.run_server(host="0.0.0.0")

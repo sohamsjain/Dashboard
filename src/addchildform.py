@@ -38,10 +38,11 @@ typecomponent = html.Div([
     className="radio-group m-3"
 )
 
+storexoneid = dcc.Store(id="store-xoneid")
 
 addchildform = dbc.Form(
     [
-        tickercomponent, sizecomponent, alertcomponent
+        tickercomponent, sizecomponent, alertcomponent, storexoneid
     ]
 )
 
@@ -60,7 +61,7 @@ addchildmodal = dbc.Modal(
                 typecomponent,
                 dbc.Button(
                     "Submit",
-                    id=dict(object="addchild-form", component="submit-button", xoneid=0),
+                    id=dict(object="addchild-form", component="submit-button"),
                     className="ml-auto",
                     n_clicks=0,
                     color="primary"

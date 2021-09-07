@@ -1,5 +1,5 @@
 from src.myapp import *
-from src.accordiontest import createxonecomponents
+from src.accordiontest import createxonecomponents, createchildcomponents
 import src.globalvars as gvars
 
 
@@ -35,26 +35,42 @@ app.clientside_callback(
 
 
 @app.callback(
-    [Output(dict(object="xone", component=f"{attr}-div", id=MATCH), "children") for attr in
+    [Output(dict(object="xone", component=f"{attr}-div", id=ALL), "children") for attr in
      ["status", "lastprice", "pnl"]],
-    Input(dict(object="xone", component="interval", id=MATCH), "n_intervals"),
-    State(dict(object="xone", component="status-div", id=MATCH), "children"),
+    [Output(dict(object="child", component=f"{attr}-div", id=ALL), "children") for attr in
+     ["status", "lastprice", "pnl"]],
+    Input("interval", "n_intervals"),
+    State(dict(object="xone", component="status-div", id=ALL), "children"),
     prevent_initial_call=True
 )
-def updatexoneoninterval(interval, status):
+def updateoninterval(interval, oldstatuses):
     ctx = dash.callback_context
-    propstr = ctx.triggered[0]["prop_id"].split(".")[0]
-    propdict = eval(propstr)
-    id = propdict['id']
-    session = db.scoped_session()
-    xone = session.query(Xone).get(id)
-    new_status = xone.status.capitalize()
-    if new_status == status:
-        new_status = dash.no_update
-    lastprice = xone.lastprice
-    pnl = xone.pnl
-    session.close()
-    return new_status, lastprice, pnl
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+    currentstatusbyid = {k["id"]["id"]: k["value"] for k in ctx.states_list[0]}
+    try:
+        session = db.scoped_session()
+        xonestatuses, xonelastprices, xonepnls = list(), list(), list()
+        ids = [component["id"]["id"] for component in ctx.outputs_list[0]]
+        for id in ids:
+            xone = session.query(Xone).get(id)
+            new_status = xone.status.capitalize()
+            if new_status == currentstatusbyid[id]:
+                new_status = dash.no_update
+            xonestatuses.append(new_status)
+            xonelastprices.append(xone.lastprice)
+            xonepnls.append(xone.pnl)
+        childstatuses, childlastprices, childpnls = list(), list(), list()
+        ids = [component["id"]["id"] for component in ctx.outputs_list[3]]
+        for id in ids:
+            child = session.query(Child).get(id)
+            childstatuses.append(child.status.capitalize())
+            childlastprices.append(child.lastprice)
+            childpnls.append(child.pnl)
+        session.close()
+        return xonestatuses, xonelastprices, xonepnls, childstatuses, childlastprices, childpnls
+    except AttributeError as ae:
+        raise dash.exceptions.PreventUpdate
 
 
 @app.callback(
@@ -217,9 +233,9 @@ def warning1(entry, stoploss):
     if entry and stoploss:
         risk = abs(entry - stoploss)
         if entry > stoploss:
-            return entry + risk, "success", ""
+            return round(entry + risk, 2), "success", ""
         elif entry < stoploss:
-            return entry - risk, "danger", ""
+            return round(entry - risk, 2), "danger", ""
         else:
             return None, "light", "Stoploss can't be equal to Entry"
     return None, "light", ""
@@ -298,29 +314,6 @@ def adddeletexone(submit, deletes, ticker, entry, stoploss, target, autonomous):
 
 
 @app.callback(
-    [Output(dict(object="child", component=f"{attr}-div", id=MATCH), "children") for attr in
-     ["status", "lastprice", "pnl"]],
-    Input(dict(object="child", component="interval", id=MATCH), "n_intervals"),
-    State(dict(object="child", component="status-div", id=MATCH), "children"),
-    prevent_initial_call=True
-)
-def updatechildoninterval(interval, status):
-    ctx = dash.callback_context
-    propstr = ctx.triggered[0]["prop_id"].split(".")[0]
-    propdict = eval(propstr)
-    id = propdict['id']
-    session = db.scoped_session()
-    child = session.query(Child).get(id)
-    new_status = child.status.capitalize()
-    if new_status == status:
-        new_status = dash.no_update
-    lastprice = child.lastprice
-    pnl = child.pnl
-    session.close()
-    return new_status, lastprice, pnl
-
-
-@app.callback(
     Output(dict(object="child", component="size-div", id=MATCH), "children"),
     Output(dict(object="child", component="size-popover", id=MATCH), "is_open"),
     Input(dict(object="child", component="size-modify-button", id=MATCH), "n_clicks"),
@@ -341,24 +334,72 @@ def modifysize(n_clicks, value):
 
 
 @app.callback(
-    Output(dict(object="xone", component="child-container", id=ALL, xoneid=MATCH), "children"),
+    [Output("addchild-form-alert", f"{each}") for each in ["is_open", "children", "color"]],
+    Output(dict(object="xone", component="child-container2", id=ALL, xoneid=ALL), "children"),
+    Input(dict(object="addchild-form", component="submit-button"), "n_clicks"),
+    [State(each, "value") for each in ["addchild-ticker-dropdown", "size-input", "childtype-radioitems"]],
+    State("store-xoneid", "data"),
+    prevent_initial_call=True
+)
+def addchild(_, ticker, size, type, xoneid):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
+
+    newcomponents = [dash.no_update] * len(ctx.outputs_list[3])
+    color = "danger"
+    if not(ticker and size):
+        return True, "All fields required", color, newcomponents
+    childdict = dict(
+        xone_id=xoneid,
+        symbol=ticker,
+        size=size)
+    if type != "Auto":
+        childdict.update(dict(type=type.upper()))
+    response = ChildRequests.create(**childdict)
+    if "success" in response.lower():
+        newcomponents = [True if component["id"]["id"] == xoneid else dash.no_update for component in
+                         ctx.outputs_list[3]]
+        index = newcomponents.index(True)
+        color = "success"
+        newchildid = int(response.split(" ")[-1])
+        session = db.scoped_session()
+        newchild = session.query(Child).get(newchildid)
+        newcomponent = createchildcomponents(newchild)
+        gvars.childcomponentsbyxoneid[xoneid].append(newcomponent)
+        updatedchildcomponents = html.Div(
+            gvars.childcomponentsbyxoneid[xoneid],
+            id=dict(object="xone", component="child-container1", id=xoneid, xoneid=xoneid)
+        )
+        newcomponents[index] = updatedchildcomponents
+    return True, response, color, newcomponents
+
+
+@app.callback(
+    Output(dict(object="xone", component="child-container1", id=ALL, xoneid=MATCH), "children"),
     Input(dict(object="child", component="delete-button", id=ALL, xoneid=MATCH), "n_clicks"),
     prevent_initial_call=True
 )
-def adddeletechild(n_clicks):
+def deletechild(_):
     ctx = dash.callback_context
+    if not ctx.triggered:
+        raise dash.exceptions.PreventUpdate
     propstr = ctx.triggered[0]["prop_id"].split(".")[0]
     propdict = eval(propstr)
-    id = propdict['id']
     xoneid = propdict['xoneid']
-    todelete = list(filter(lambda x: x.id['id'] == id, gvars.childcomponentsbyxoneid[xoneid]))[0]
-    gvars.childcomponentsbyxoneid[xoneid].remove(todelete)
-    return [gvars.childcomponentsbyxoneid[xoneid]]
+    id = propdict['id']
+    updatedchildcomponents = dash.no_update
+    response = ChildRequests.delete(**dict(child_id=id))
+    if "success" in response.lower():
+        todelete = list(filter(lambda x: x.id['id'] == id, gvars.childcomponentsbyxoneid[xoneid]))[0]
+        gvars.childcomponentsbyxoneid[xoneid].remove(todelete)
+        updatedchildcomponents = [gvars.childcomponentsbyxoneid[xoneid]]
+    return updatedchildcomponents
 
 
 @app.callback(
     Output("addchild-modal", "is_open"),
-    Output(dict(object="addchild-form", component="submit-button", xoneid=ALL), "id"),
+    Output("store-xoneid", "data"),
     Output("addchild-ticker-dropdown", "options"),
     Output("addchild-ticker-dropdown", "value"),
     [Output("size-input", each) for each in ["min", "step", "value"]],
@@ -373,8 +414,6 @@ def togglemodal(n1, _, is_open):
         raise dash.exceptions.PreventUpdate
     ctx = dash.callback_context
     propstr = ctx.triggered[0]["prop_id"].split(".")[0]
-    # if not propstr:
-    #     raise dash.exceptions.PreventUpdate
     propdict = eval(propstr)
     id = propdict['id']
     xstores = ctx.states_list[0]
@@ -382,20 +421,24 @@ def togglemodal(n1, _, is_open):
     cds = gvars.contracts.query(f"underlying=='{underlying}'")
     tickeroptions = [dict(label=tk, value=tk) for tk in cds["symbol"].to_list()]
     lotsize = cds["lotsize"].values[-1]
-    newid = [dict(object="addchild-form", component="submit-button", xoneid=id)]
-    return not is_open, newid, tickeroptions, None, lotsize, lotsize, lotsize, "Auto"
+    return not is_open, id, tickeroptions, None, lotsize, lotsize, lotsize, "Auto"
 
 
-@app.callback(
+app.clientside_callback(
+    """
+    function(type){
+        if (type == "Auto"){
+            return ["btn btn-primary", ["primary"]]
+        }
+        else if (type == "Buy"){
+            return ["btn btn-success", ["success"]]
+        }
+        else if (type == "Sell"){
+            return ["btn btn-danger", ["danger"]]
+        }
+    }
+    """,
     Output("childtype-radioitems", "labelClassName"),
     Output(dict(object="addchild-form", component="submit-button", xoneid=ALL), "color"),
     Input("childtype-radioitems", "value"),
 )
-def submitcolor(type):
-    if type == "Auto":
-        return "btn btn-primary", ["primary"]
-    if type == "Buy":
-        return "btn btn-success", ["success"]
-    if type == "Sell":
-        return "btn btn-danger", ["danger"]
-    return dash.no_update

@@ -18,7 +18,7 @@ tickercomponent = dbc.FormGroup(
 entrycomponent = dbc.FormGroup(
     [
         dbc.Label("Entry", html_for="entry-input", style=labelstyle),
-        dbc.Input(type="number", id="entry-input", placeholder="Entry", style=labelstyle, min=0),
+        dbc.Input(type="number", id="entry-input", placeholder="Entry", style=labelstyle, min=0, step=0.05),
         dbc.FormText(id="entry-formtext", style=textstyle, color="danger")
     ]
 )
@@ -26,7 +26,7 @@ entrycomponent = dbc.FormGroup(
 stoplosscomponent = dbc.FormGroup(
     [
         dbc.Label("Stoploss", html_for="stoploss-input", style=labelstyle),
-        dbc.Input(type="number", id="stoploss-input", placeholder="Stoploss", style=labelstyle, min=0),
+        dbc.Input(type="number", id="stoploss-input", placeholder="Stoploss", style=labelstyle, min=0, step=0.05),
         dbc.FormText(id="stoploss-formtext", style=textstyle, color="danger"),
     ]
 )
@@ -34,7 +34,7 @@ stoplosscomponent = dbc.FormGroup(
 targetcomponent = dbc.FormGroup(
     [
         dbc.Label("Target", html_for="target-input", style=labelstyle),
-        dbc.Input(type="number", id="target-input", placeholder="Target", style=labelstyle, min=0),
+        dbc.Input(type="number", id="target-input", placeholder="Target", style=labelstyle, min=0, step=0.05),
         dbc.FormText(id="target-formtext", style=textstyle, color="danger")
     ]
 )

@@ -79,12 +79,6 @@ def createchildcomponents(child):
         disabled=False
     )
 
-    child.interval = dcc.Interval(
-        id=dict(object="child", component="interval", id=child.id),
-        interval=1000 * 3,
-        n_intervals=0,
-    )
-
     child.cardheader = dbc.CardHeader(
         [
             dbc.Row(
@@ -102,7 +96,7 @@ def createchildcomponents(child):
         ]
     )
 
-    childcomponent = html.Div([child.cardheader, child.interval],
+    childcomponent = html.Div([child.cardheader],
                               id=dict(object="child", component="component", id=child.id))
 
     return childcomponent
@@ -293,12 +287,6 @@ def createxonecomponents(xone):
         className=m3
     )
 
-    xone.interval = dcc.Interval(
-        id=dict(object="xone", component="interval", id=xone.id),
-        interval=1000 * 3,
-        n_intervals=0,
-    )
-
     xone.store = dcc.Store(id=dict(object="xone", component="store", id=xone.id), data=xone.contract.underlying)
 
     gvars.childcomponentsbyxoneid.update({xone.id: [createchildcomponents(child) for child in xone.children]})
@@ -328,8 +316,13 @@ def createxonecomponents(xone):
                     dbc.CardBody(
                         [
                             html.Div(
-                                gvars.childcomponentsbyxoneid[xone.id],
-                                id=dict(object="xone", component="child-container", id=xone.id, xoneid=xone.id)
+                                [
+                                    html.Div(
+                                        gvars.childcomponentsbyxoneid[xone.id],
+                                        id=dict(object="xone", component="child-container1", id=xone.id, xoneid=xone.id)
+                                    )
+                                ],
+                                id=dict(object="xone", component="child-container2", id=xone.id, xoneid=xone.id)
                             )
                         ] + [xone.addchildbutton, xone.deletexonebutton],
                         className='mx-3 mb-3',
@@ -341,7 +334,7 @@ def createxonecomponents(xone):
         ])
 
     xonecomponent = html.Div(
-        [xone.card, xone.interval, xone.store],
+        [xone.card,  xone.store],
         id=dict(object="xone", component="component", id=xone.id)
     )
 

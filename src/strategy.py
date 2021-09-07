@@ -215,19 +215,19 @@ class Grid(bt.Strategy):
                     if data.low[0] < xone.stoploss:
                         if xone.status == XoneStatus.ENTRY:
                             xone.status = XoneStatus.STOPLOSSHIT
+                            xone.nextstatus = XoneStatus.STOPLOSS
                             xone.exit_at = datetime.now()
 
                         if xone.autonomous:
-                            xone.nextstatus = XoneStatus.STOPLOSS
                             xone.close_children = True
 
                     elif data.high[0] >= xone.target:
                         if xone.status == XoneStatus.ENTRY:
                             xone.status = XoneStatus.TARGETHIT
+                            xone.nextstatus = XoneStatus.TARGET
                             xone.exit_at = datetime.now()
 
                         if xone.autonomous:
-                            xone.nextstatus = XoneStatus.TARGET
                             xone.close_children = True
 
                 else:
@@ -308,6 +308,7 @@ class Grid(bt.Strategy):
                     responseq.put(ResponseType.ADDXONEFAILURE)
                     continue
                 responseq.put(ResponseType.ADDXONESUCCESS)
+                responseq.put(xone.id)
                 continue
 
             if head == RequestType.DELETEXONE:
@@ -346,6 +347,7 @@ class Grid(bt.Strategy):
                     responseq.put(ResponseType.ADDCHILDFAILURE)
                     continue
                 responseq.put(ResponseType.ADDCHILDSUCCESS)
+                responseq.put(child.id)
                 continue
 
             if head == RequestType.DELETECHILD:
