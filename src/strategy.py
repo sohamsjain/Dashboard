@@ -85,6 +85,7 @@ class Grid(bt.Strategy):
         xone.orders.remove(order)
 
         if xone.orders == [None]:  # All child orders processed
+            xone.orders.clear()
 
             if xone.status in XoneStatus.PENDING:
 
@@ -113,7 +114,7 @@ class Grid(bt.Strategy):
                 self.removexone(xone)
                 self.openxones.remove(xone)
 
-            xone.orders.clear()
+            self.batman.ravenq.put(xone.notification())
 
         self.session.commit()
 
@@ -121,10 +122,10 @@ class Grid(bt.Strategy):
         pass
 
     def notify_data(self, data, status, *args, **kwargs):
-        print(data._dataname, data._getstatusname(status))
+        print(datetime.now(), data._dataname, data._getstatusname(status))
 
     def notify_store(self, msg, *args, **kwargs):
-        print(msg)
+        print(datetime.now(), msg)
 
     def notify_cashvalue(self, cash, value):
         # print("Cash: ", cash, "Value", value)
@@ -133,6 +134,9 @@ class Grid(bt.Strategy):
     def notify_fund(self, cash, value, fundvalue, shares):
         # print(cash, value, fundvalue, shares)
         pass
+
+    def prenext(self):
+        self.next()
 
     def next(self):
 
@@ -159,17 +163,20 @@ class Grid(bt.Strategy):
                         for child in xone.children:
                             child.status = ChildStatus.UNUSED
                         self.removexone(xone)
+                        self.batman.ravenq.put(xone.notification())
                         continue
                     if data.low[0] < xone.stoploss:
                         xone.status = XoneStatus.FAILED
                         for child in xone.children:
                             child.status = ChildStatus.UNUSED
                         self.removexone(xone)
+                        self.batman.ravenq.put(xone.notification())
                         continue
                     if data.low[0] <= xone.entry:
                         if xone.status == XoneStatus.CREATED:
                             xone.status = XoneStatus.ENTRYHIT
                             xone.entry_at = datetime.now()
+                            self.batman.ravenq.put(xone.notification())
                         if xone.autonomous:
                             xone.open_children = True
 
@@ -179,17 +186,20 @@ class Grid(bt.Strategy):
                         for child in xone.children:
                             child.status = ChildStatus.UNUSED
                         self.removexone(xone)
+                        self.batman.ravenq.put(xone.notification())
                         continue
                     if data.high[0] > xone.stoploss:
                         xone.status = XoneStatus.FAILED
                         for child in xone.children:
                             child.status = ChildStatus.UNUSED
                         self.removexone(xone)
+                        self.batman.ravenq.put(xone.notification())
                         continue
                     if data.high[0] >= xone.entry:
                         if xone.status == XoneStatus.CREATED:
                             xone.status = XoneStatus.ENTRYHIT
                             xone.entry_at = datetime.now()
+                            self.batman.ravenq.put(xone.notification())
                         if xone.autonomous:
                             xone.open_children = True
 
@@ -217,6 +227,7 @@ class Grid(bt.Strategy):
                             xone.status = XoneStatus.STOPLOSSHIT
                             xone.nextstatus = XoneStatus.STOPLOSS
                             xone.exit_at = datetime.now()
+                            self.batman.ravenq.put(xone.notification())
 
                         if xone.autonomous:
                             xone.close_children = True
@@ -226,6 +237,7 @@ class Grid(bt.Strategy):
                             xone.status = XoneStatus.TARGETHIT
                             xone.nextstatus = XoneStatus.TARGET
                             xone.exit_at = datetime.now()
+                            self.batman.ravenq.put(xone.notification())
 
                         if xone.autonomous:
                             xone.close_children = True
@@ -234,23 +246,31 @@ class Grid(bt.Strategy):
                     if data.high[0] > xone.stoploss:
                         if xone.status == XoneStatus.ENTRY:
                             xone.status = XoneStatus.STOPLOSSHIT
+                            xone.nextstatus = XoneStatus.STOPLOSS
                             xone.exit_at = datetime.now()
+                            self.batman.ravenq.put(xone.notification())
 
                         if xone.autonomous:
-                            xone.nextstatus = XoneStatus.STOPLOSS
                             xone.close_children = True
 
                     elif data.low[0] <= xone.target:
                         if xone.status == XoneStatus.ENTRY:
                             xone.status = XoneStatus.TARGETHIT
+                            xone.nextstatus = XoneStatus.TARGET
                             xone.exit_at = datetime.now()
+                            self.batman.ravenq.put(xone.notification())
 
                         if xone.autonomous:
-                            xone.nextstatus = XoneStatus.TARGET
                             xone.close_children = True
 
                 if xone.close_children or xone.forced_exit:
                     xone.close_children = False
+                    if xone.nextstatus is None:
+                        if xone.isbullish:
+                            xone.nextstatus = XoneStatus.PROFIT if xone.lastprice > xone.entry else XoneStatus.LOSS
+                        else:
+                            xone.nextstatus = XoneStatus.PROFIT if xone.lastprice < xone.entry else XoneStatus.LOSS
+
                     for child in xone.children:
                         if child.isbuy:
                             order = self.sell(data=child.data, size=child.filled)
@@ -285,8 +305,11 @@ class Grid(bt.Strategy):
 
         self.handlerequests()
 
-        if self.datas[0].datetime.time(0) >= SESSIONSTOP:
-            self.cerebro.runstop()
+        try:
+            if self.datas[0].datetime.time(0) >= SESSIONSTOP:
+                self.cerebro.runstop()
+        except IndexError:
+            pass
 
     def handlerequests(self):
 
@@ -374,7 +397,9 @@ class Grid(bt.Strategy):
     def start(self):
         self.batman.market = True
         self.batman.sessionq = self.sessionq
+        self.batman.ravenq.put("Market Starts")
 
     def stop(self):
         self.batman.market = False
         self.batman.sessionq = None
+        self.batman.ravenq.put("Market Stops")

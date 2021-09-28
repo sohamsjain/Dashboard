@@ -1,13 +1,19 @@
+import time
+from typing import Optional
 import datetime
 import pandas as pd
 import backtrader as bt
 from src.constants import NSELOTSIZECSV, HOST, PORT
-from src.models import Db
+from src.models import *
+
 
 store = None
+db = None
+lotsize: Optional[pd.DataFrame] = None
 
 
 def getlotsizefromnse():
+    global lotsize
     lotsize = pd.read_csv(NSELOTSIZECSV)
 
     lotsize.columns = [c.strip() for c in lotsize.columns]
@@ -18,13 +24,13 @@ def getlotsizefromnse():
     return lotsize
 
 
-lotsize = getlotsizefromnse()
+getlotsizefromnse()
 
 
 def getlotsize(contract_dict):
     symbol = contract_dict['underlying']
-    expiry: datetime = contract_dict['expiry']
-    if type(expiry) == pd._libs.tslibs.nattype.NaTType:
+    expiry = contract_dict['expiry']
+    if expiry is None:
         return 1
     expiry = pd.to_datetime(expiry)
     strexpiry = expiry.strftime("%b-%y").upper()
@@ -38,6 +44,8 @@ def getlotsize(contract_dict):
 def createbtsymbol(contract_dict):
     sectype = contract_dict['sectype']
     ticker = contract_dict['underlying'][:9]
+    if "&" in ticker:
+        ticker = ticker.replace("&", "")
     exchange = contract_dict['exchange']
     currency = contract_dict['currency']
     expiry = contract_dict['expiry']
@@ -55,56 +63,99 @@ def createbtsymbol(contract_dict):
         return "_".join([ticker, sectype, exchange, currency, expiry, strike, right, mult])
 
 
-def getcds(symbol):
-    global store
+def addcontract(symbol):
+    global store, db
+    added = 0
+    existed = 0
     sym = symbol[:9]
-    list_of_contracts = []
-    for sectype in ["IND", "STK", "FUT", "OPT"]:
+    if "&" in sym:
+        sym = sym.replace("&", "")
+    for sectype in ["OPT", "IND", "STK", "FUT"]:
         contract = store.makecontract(symbol=sym, sectype=sectype, exch="NSE", curr="INR")
+        start = time.perf_counter()
         cds = store.getContractDetails(contract)
+        stop = time.perf_counter()
+        print(f"{symbol} {sectype} time: {stop-start}s")
         if cds is None:
             continue
-        for con in cds:
-            c = con.contractDetails.m_summary
-            list_of_contracts.append(
-                dict(
-                    id=c.m_conId,
-                    underlying=symbol,
-                    sectype=c.m_secType,
-                    exchange=c.m_exchange,
-                    currency=c.m_currency,
-                    symbol=c.m_localSymbol,
-                    strike=c.m_strike,
-                    right=c.m_right,
-                    expiry=c.m_expiry,
-                    multiplier=c.m_multiplier,
-                )
+        cds = [con.contractDetails.m_summary for con in cds]
+        session = db.scoped_session()
+        existingcontracts = session.query(Contract).filter(and_(Contract.underlying == symbol, Contract.sectype == sectype)).all()
+        existingsymbols = [con.symbol for con in existingcontracts] if existingcontracts else []
+        if existingsymbols:
+            l1 = len(cds)
+            cds = [con for con in cds if con.m_localSymbol not in existingsymbols]
+            l2 = len(cds)
+            existed += l1-l2
+        newcontracts = []
+        for c in cds:
+            newcontractdictionary = dict(
+                id=c.m_conId,
+                underlying=symbol,
+                sectype=c.m_secType,
+                exchange=c.m_exchange,
+                currency=c.m_currency,
+                symbol=c.m_localSymbol,
+                strike=c.m_strike,
+                right=c.m_right,
+                expiry=c.m_expiry,
+                multiplier=c.m_multiplier,
             )
-    return list_of_contracts
+            newcontractdictionary.update(dict(btsymbol=createbtsymbol(newcontractdictionary),
+                                              lotsize=getlotsize(newcontractdictionary)))
+            newcontract = Contract(**newcontractdictionary)
+            newcontracts.append(newcontract)
+        added += len(newcontracts)
+        session.add_all(newcontracts)
+        session.commit()
+        session.close()
+    return added, existed
 
 
 def updatecontracts():
-    global store
-    print("Updating Contracts...")
+    global store, db
     db = Db()
+    print("Deleting unused expired contracts...", end="\t")
+    deleted = deleteexpiredcontracts()
+    print(f"{deleted} deleted!")
     store = bt.stores.IBStore(host=HOST, port=PORT)
+    if store.dontreconnect:
+        store.dontreconnect = False
     store.start()
-
-    supercontract = list()
-    old_df = pd.read_sql_table("contracts", db.engine)
-    all_tickers = old_df[(old_df.sectype == 'IND') | (old_df.sectype == 'STK')].underlying
-
-    for ticker in all_tickers.to_list():
+    getlotsizefromnse()
+    all_tickers: list = lotsize[(lotsize.SYMBOL != 'Symbol')].SYMBOL.to_list()
+    if "NIFTY" in all_tickers:
+        all_tickers[all_tickers.index("NIFTY")] = "NIFTY50"
+    print("Updating Contracts...")
+    for ticker in all_tickers[:]:
         print(f"Updating {ticker}...")
-        supercontract.extend(getcds(ticker))
+        added, existed = addcontract(ticker)
+        print(f"Added: {added}, Existed:{existed}")
 
-    df = pd.DataFrame(supercontract)
-    print("creating btsymbol")
-    df["btsymbol"] = df.apply(createbtsymbol, axis=1)
-    df.expiry = pd.to_datetime(df.expiry)
-    print("copying lotsize")
-    df["lotsize"] = df.apply(getlotsize, axis=1)
-    print("writing to database")
-    df.to_sql('contracts', db.engine, if_exists="replace", index=False)
+    store.stop()
     store = None
+    db.engine.dispose()
+    db = None
     print("update successful...")
+
+
+def deleteexpiredcontracts():
+    global db
+    deleted = 0
+    session = db.scoped_session()
+    allcontracts = session.query(Contract).filter(or_(Contract.sectype == SecType.FUT,
+                                                      Contract.sectype == SecType.OPT)).all()
+    for contract in allcontracts:
+        if contract.expiry.date() < datetime.now().date():
+            try:
+                session.delete(contract)
+                session.commit()
+                deleted += 1
+            except IntegrityError as ae:
+                session.rollback()
+    session.close()
+    return deleted
+
+
+if __name__ == '__main__':
+    updatecontracts()

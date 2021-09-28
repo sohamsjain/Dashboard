@@ -13,6 +13,7 @@ from src.constants import HOST, PORT, YESTERDAY, SESSIONSTART, SESSIONEND
 from src.helpers import updatecontracts
 from src.models import Db, Child, Xone, Contract, scoped_session, NoResultFound, MultipleResultsFound, or_, \
     StatementError, OperationalError
+from src.raven.raven import Raven, dict_to_str
 from src.util import ChildStatus, XoneType, ChildType, XoneStatus, RequestType, ResponseType
 
 
@@ -35,12 +36,16 @@ class BaTMan:
         self.market = False
         self.sessionq: Optional[Queue] = None
 
+        self.raven: Raven = Raven()
+        self.ravenq: Optional[Queue] = None
+        self.raventhread = Thread(target=self.sendaraven, name="raven")
+        self.raventhread.start()
+
         self.schedulerthread = Thread(target=self.scheduler, name="scheduler")
         self.schedulerthread.start()
 
     def scheduler(self):
         schedule.every().day.at("09:10").do(self.run)
-        schedule.every().friday.at("06:15").do(updatecontracts)
         while 1:
             schedule.run_pending()
             time.sleep(1)
@@ -186,12 +191,14 @@ class BaTMan:
                 xid = q.get()
                 return f"Xone Created Successfully {xid}"
             elif response == ResponseType.ADDXONEFAILURE:
-                return "Xone Could not be created"
+                return f"Xone Could not be created"
 
         else:
             session.add(xone)
             session.commit()
-            return f"Xone Created Successfully {xone.id}"
+            xid = xone.id
+            session.close()
+            return f"Xone Created Successfully {xid}"
 
     def updatexone(self, dictionary):
         updatekwargs = {key: val for key, val in dictionary.items() if val}
@@ -316,7 +323,7 @@ class BaTMan:
         else:
             session.delete(xone)
             session.commit()
-
+            session.close()
             return f"Xone with id {xone_id} deleted successfully"
 
     def createchild(self, dictionary):
@@ -396,7 +403,9 @@ class BaTMan:
             xone.children.append(child)
             xone.kid_count += 1
             session.commit()
-            return f"Child created Successfully {child.id}"
+            cid = child.id
+            session.close()
+            return f"Child created Successfully {cid}"
 
     def updatechild(self, dictionary):
         updatekwargs = {key: val for key, val in dictionary.items() if val}
@@ -459,7 +468,7 @@ class BaTMan:
             xone.children.remove(child)
             xone.kid_count -= 1
             session.commit()
-
+            session.close()
             return f"Child with id {child_id} deleted successfully"
 
     def getdata(self, btsymbol) -> bt.feeds.IBData:
@@ -499,6 +508,11 @@ class BaTMan:
 
         return data
 
+    def sendaraven(self):
+        self.ravenq = Queue()
+        while True:
+            self.raven.send_all_clients(self.ravenq.get())
+
     def run(self):
         try:
             self.alldatas.clear()
@@ -531,9 +545,10 @@ class BaTMan:
                     Xone.status == XoneStatus.ENTRY, Xone.status == XoneStatus.STOPLOSSHIT,
                     Xone.status == XoneStatus.TARGETHIT)).all()
 
-            self.openxones = self.session.query(Xone).filter(Xone.status == XoneStatus.ENTRY,
-                                                             Xone.status == XoneStatus.STOPLOSSHIT,
-                                                             Xone.status == XoneStatus.TARGETHIT).all()
+            self.openxones = self.session.query(Xone).filter(
+                or_(Xone.status == XoneStatus.ENTRY,
+                    Xone.status == XoneStatus.STOPLOSSHIT,
+                    Xone.status == XoneStatus.TARGETHIT)).all()
 
             for xone in self.allxones:
                 xone.start()

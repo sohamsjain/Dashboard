@@ -76,6 +76,15 @@ StyleStoploss[XoneStatus.STOPLOSS] = {
     "font-size": "20px",
     "text-align": "center"
 }
+StyleStoploss[XoneStatus.LOSS] = {
+    "background-image": "linear-gradient(45deg, #a80000 25%, #5F5370 25%, #5F5370 50%, #a80000 50%, #a80000 75%, #5F5370 75%, #5F5370 100%)",
+    "background-size": "28.28px 28.28px",
+    "color": "white",
+    "border": "",
+    "border-radius": "10px",
+    "font-size": "20px",
+    "text-align": "center"
+}
 
 StyleTargetDefault = {
     "background-color": "",
@@ -104,6 +113,15 @@ StyleTarget[XoneStatus.MISSED] = {
 }
 StyleTarget[XoneStatus.TARGET] = {
     "background-color": "green",
+    "color": "white",
+    "border": "",
+    "border-radius": "10px",
+    "font-size": "20px",
+    "text-align": "center"
+}
+StyleTarget[XoneStatus.PROFIT] = {
+    "background-image": "linear-gradient(45deg, #009118 25%, #5F5370 25%, #5F5370 50%, #009118 50%, #009118 75%, #5F5370 75%, #5F5370 100%)",
+    "background-size": "28.28px 28.28px",
     "color": "white",
     "border": "",
     "border-radius": "10px",

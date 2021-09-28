@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, D
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, scoped_session
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
-from sqlalchemy.exc import StatementError, OperationalError
+from sqlalchemy.exc import StatementError, OperationalError, IntegrityError
 
 from src.util import *
 
@@ -66,6 +66,29 @@ class Xone(Base):
         self.close_children = False
         self.data = None
 
+    def attributes(self):
+        attributes = dict(symbol=self.symbol,
+                          type=self.type,
+                          entry=self.entry,
+                          stoploss=self.stoploss,
+                          target=self.target,
+                          status=self.status,
+                          pnl=self.pnl,
+                          lastprice=self.lastprice,
+                          sectype=self.sectype,
+                          expiry=self.expiry)
+        attributes = {k: v for k, v in attributes.items() if v}
+        return attributes
+
+    def notification(self):
+        type = '+' if self.type == XoneType.BULLISH else '-'
+        notif = f"{self.status}\n{self.symbol}:\t {self.lastprice}\n{type} {self.entry}  SL {self.stoploss}  T {self.target}"
+        for child in self.children:
+            ctype = '+' if child.type == ChildType.BUY else '-'
+            notif += "\n______________________________\n"
+            notif += f"{child.status}\n{child.symbol}:\t {child.lastprice}\n{ctype} {child.size}"
+        return notif
+
 
 class Child(Base):
     __tablename__ = 'children'
@@ -98,6 +121,18 @@ class Child(Base):
         self.isbuy = True if self.type == ChildType.BUY else False
         self.data = None
 
+    def attributes(self):
+        attributes = dict(symbol=self.symbol,
+                          type=self.type,
+                          size=self.size,
+                          status=self.status,
+                          filled=self.filled,
+                          pnl=self.pnl,
+                          lastprice=self.lastprice,
+                          sectype=self.sectype,
+                          expiry=self.expiry)
+        attributes = {k: v for k, v in attributes.items() if v}
+        return attributes
 
 class Db:
 
@@ -108,10 +143,10 @@ class Db:
         self.password = "Soham19jain98"
         self.host = "localhost"
         self.port = "3306"
-        self.database = "cerebelle"
+        self.database = "cerebelle2"
         self.engine = create_engine(
             f"{self.dialect}+{self.driver}://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
-            echo=False)
+            echo=False, pool_size=10, max_overflow=20)
         self.tables = self.engine.table_names()
         Base.metadata.create_all(self.engine)
         self.session_factory = sessionmaker(bind=self.engine)
